@@ -424,8 +424,14 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
       // Automatically join the newly created community
       handleEnterCommunityDirect(payload);
     } catch (err: any) {
-      setCError('Failed to create community. Try again.');
-      handleFirestoreError(err, OperationType.WRITE, 'communities');
+      console.error('Community creation error details:', err);
+      const detailedMessage = err?.message || 'Failed to create community. Try again.';
+      setCError(`Failed to create community: ${detailedMessage}`);
+      try {
+        handleFirestoreError(err, OperationType.WRITE, 'communities');
+      } catch (fErr) {
+        console.error('Firestore log handler error:', fErr);
+      }
     } finally {
       setCSubmitting(false);
     }
@@ -754,6 +760,18 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
     });
   };
 
+  // Share community itself deep-link
+  const handleShareCommunity = () => {
+    if (!activeCommunity) return;
+    const shareLink = `${window.location.origin}/communities?communityId=${activeCommunity.id}`;
+    
+    navigator.clipboard.writeText(shareLink).then(() => {
+      alert('COPILOT SYNC: Shared community deep link has been copied to your clipboard!');
+    }).catch(() => {
+      alert(`Link: ${shareLink}`);
+    });
+  };
+
   // Handle Poll Vote
   const handlePollVote = async (chatId: string, optionIdx: number) => {
     if (!activeCommunity || votedChatsPolls[chatId] !== undefined) return;
@@ -976,14 +994,31 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
                     </div>
                   </div>
 
-                  {/* Pin Toggle trigger floating overlay */}
-                  <button
-                    onClick={(e) => handleTogglePin(e, comm.id)}
-                    className="absolute right-3.5 top-3.5 opacity-0 group-hover:opacity-100 p-1 text-zinc-500 hover:text-emerald-400 transition-opacity"
-                    title={isPinned ? 'Unpin community' : 'Pin community'}
-                  >
-                    <Pin className={`w-3.5 h-3.5 ${isPinned ? 'fill-emerald-400 text-emerald-400' : ''}`} />
-                  </button>
+                  {/* Floating Action Overlay */}
+                  <div className="absolute right-3 top-3.5 opacity-0 group-hover:opacity-100 flex items-center gap-1.5 transition-opacity">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const shareLink = `${window.location.origin}/communities?communityId=${comm.id}`;
+                        navigator.clipboard.writeText(shareLink).then(() => {
+                          alert('COPILOT SYNC: Shared community deep link has been copied to your clipboard!');
+                        }).catch(() => {
+                          alert(`Link: ${shareLink}`);
+                        });
+                      }}
+                      className="p-1 text-zinc-500 hover:text-emerald-400 transition-colors"
+                      title="Share community deep link"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => handleTogglePin(e, comm.id)}
+                      className="p-1 text-zinc-500 hover:text-emerald-400 transition-colors"
+                      title={isPinned ? 'Unpin community' : 'Pin community'}
+                    >
+                      <Pin className={`w-3.5 h-3.5 ${isPinned ? 'fill-emerald-400 text-emerald-400' : ''}`} />
+                    </button>
+                  </div>
                 </div>
               );
             })
@@ -1031,6 +1066,14 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
 
               {/* Header actions */}
               <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={handleShareCommunity}
+                  className="p-2 border border-zinc-850 hover:border-emerald-500/20 rounded bg-zinc-900 text-zinc-400 hover:text-emerald-400 transition-colors cursor-pointer"
+                  title="Share Community Link"
+                >
+                  <Share2 className="w-4 h-4" />
+                </button>
+
                 {activeCommunity.createdByImei === deviceSig.value && (
                   <button
                     onClick={handleOpenSettings}
