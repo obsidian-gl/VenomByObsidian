@@ -10,7 +10,8 @@ import {
   Plus, 
   Flag, 
   AlertTriangle,
-  Home
+  Home,
+  MessageSquare
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -79,31 +80,7 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-zinc-950/90 backdrop-blur-md border-t border-zinc-900/80 px-4 h-16 flex items-center justify-between safe-bottom shadow-[0_-8px_24px_rgba(0,0,0,0.6)]">
       
-      {/* 1. Guidelines Tab */}
-      <button
-        onClick={() => handleNavigate('/guidelines')}
-        className="flex flex-col items-center justify-center flex-1 h-full relative cursor-pointer group"
-        id="nav-guidelines"
-      >
-        <div className="flex flex-col items-center justify-center transition-transform duration-200 active:scale-90">
-          <BookOpen 
-            className={`w-5 h-5 transition-colors duration-250 ${
-              isTabActive('/guidelines') 
-                ? 'text-emerald-400' 
-                : 'text-zinc-500 group-hover:text-zinc-300'
-            }`} 
-          />
-          <span className={`text-[8px] font-mono font-black mt-1 uppercase tracking-wider transition-colors duration-250 ${
-            isTabActive('/guidelines') 
-              ? 'text-emerald-400' 
-              : 'text-zinc-600 group-hover:text-zinc-400'
-          }`}>
-            Rules
-          </span>
-        </div>
-      </button>
-
-      {/* 2. Policies Tab */}
+      {/* 1. Policies Tab (Replaced Rules with Policy) */}
       <button
         onClick={() => handleNavigate('/policies')}
         className="flex flex-col items-center justify-center flex-1 h-full relative cursor-pointer group"
@@ -123,6 +100,30 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({
               : 'text-zinc-600 group-hover:text-zinc-400'
           }`}>
             Policy
+          </span>
+        </div>
+      </button>
+
+      {/* 2. Community Chat Tab (Replaced Policy with Community Chat) */}
+      <button
+        onClick={() => handleNavigate('/communities')}
+        className="flex flex-col items-center justify-center flex-1 h-full relative cursor-pointer group"
+        id="nav-communities"
+      >
+        <div className="flex flex-col items-center justify-center transition-transform duration-200 active:scale-90">
+          <MessageSquare 
+            className={`w-5 h-5 transition-colors duration-250 ${
+              isTabActive('/communities') 
+                ? 'text-emerald-400' 
+                : 'text-zinc-500 group-hover:text-zinc-300'
+            }`} 
+          />
+          <span className={`text-[8px] font-mono font-black mt-1 uppercase tracking-wider transition-colors duration-250 ${
+            isTabActive('/communities') 
+              ? 'text-emerald-400' 
+              : 'text-zinc-600 group-hover:text-zinc-400'
+          }`}>
+            Community
           </span>
         </div>
       </button>

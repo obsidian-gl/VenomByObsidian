@@ -27,6 +27,8 @@ import GuidelinesPage from './components/GuidelinesPage';
 import PoliciesPage from './components/PoliciesPage';
 import ReportPage from './components/ReportPage';
 import AdminReports from './components/admin/AdminReports';
+import CommunitiesPage from './components/CommunitiesPage';
+import AdminCommunities from './components/admin/AdminCommunities';
 import { 
   Cpu, 
   Search,
@@ -580,6 +582,36 @@ export default function App() {
         className="min-h-screen bg-[#030303]"
       >
         <AdminReports />
+      </motion.div>
+    );
+  }
+
+  // Admin communities terminal route check
+  if (currentPath.startsWith('/admin/communities')) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -15 }}
+        transition={{ duration: 0.22, ease: 'easeOut' }}
+        className="min-h-screen bg-[#030303]"
+      >
+        <AdminCommunities onNavigateHome={handleBackToHome} />
+      </motion.div>
+    );
+  }
+
+  // Communities page route check
+  if (currentPath.startsWith('/communities') || currentPath.startsWith('/venom/communities')) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -15 }}
+        transition={{ duration: 0.22, ease: 'easeOut' }}
+        className="min-h-screen bg-zinc-950"
+      >
+        <CommunitiesPage onBackToHome={handleBackToHome} posts={posts} />
       </motion.div>
     );
   }

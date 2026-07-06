@@ -4,7 +4,7 @@ import { db } from '../firebase';
 import { getClientIp } from '../utils/ip';
 import { submitPostReport } from '../utils/reports';
 import { checkIpBlockStatus, BlockStatus } from '../utils/blockChecker';
-import { ShieldAlert, ChevronLeft, Search, Eye, AlertCircle, CheckCircle, RefreshCw, AlertTriangle, ExternalLink, Download } from 'lucide-react';
+import { ShieldAlert, ChevronLeft, Search, Eye, AlertCircle, CheckCircle, RefreshCw, AlertTriangle, ExternalLink, Download, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import VenomCard from './VenomCard';
 import { MobileBottomBar } from './MobileBottomBar';
@@ -178,6 +178,16 @@ export default function ReportPage({ onBackToHome }: ReportPageProps) {
           </div>
           
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                window.history.pushState({}, '', '/guidelines');
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }}
+              className="px-3 py-1 bg-emerald-950/20 hover:bg-emerald-950/40 border border-emerald-500/20 text-emerald-400 hover:text-emerald-300 text-[10px] font-bold rounded transition-colors uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>View Rules</span>
+            </button>
             <button
               onClick={() => {
                 if (onBackToHome) {

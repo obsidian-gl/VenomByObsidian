@@ -70,10 +70,11 @@
     },
     "Report": {
       "title": "Report",
-      "description": "A report filed against a post.",
+      "description": "A report filed against a post or community.",
       "type": "object",
       "properties": {
         "postId": { "type": "string" },
+        "communityId": { "type": "string" },
         "postTitle": { "type": "string" },
         "postContent": { "type": "string" },
         "postImageUrl": { "type": "string" },
@@ -85,7 +86,7 @@
         "ip": { "type": "string" },
         "imei": { "type": "string" }
       },
-      "required": ["postId", "reason", "createdAt"]
+      "required": ["reason", "createdAt"]
     },
     "Interaction": {
       "title": "Interaction",
@@ -95,13 +96,82 @@
         "ip": { "type": "string" },
         "imei": { "type": "string" },
         "postId": { "type": "string" },
+        "chatId": { "type": "string" },
         "type": { "type": "string" },
         "direction": { "type": "string" },
         "optionIndex": { "type": "integer" },
         "reactionKey": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["postId", "type", "createdAt"]
+      "required": ["type", "createdAt"]
+    },
+    "Community": {
+      "title": "Community",
+      "description": "A community created by a user containing profile details, restrictions, and members info.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "religion": { "type": "string" },
+        "userLimit": { "type": "integer" },
+        "allowUserPost": { "type": "boolean" },
+        "password": { "type": "string" },
+        "createdByIp": { "type": "string" },
+        "createdByImei": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "reportsCount": { "type": "integer" },
+        "isBlocked": { "type": "boolean" },
+        "viewsCount": { "type": "integer" }
+      },
+      "required": ["id", "name", "description", "religion", "allowUserPost", "createdByIp", "createdByImei", "createdAt", "reportsCount", "isBlocked", "viewsCount"]
+    },
+    "CommunityChat": {
+      "title": "CommunityChat",
+      "description": "A chat/post message within a community.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "communityId": { "type": "string" },
+        "type": { "type": "string", "enum": ["text", "image", "poll", "qa"] },
+        "content": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "pollOptions": { "type": "array" },
+        "pollVotes": { "type": "object" },
+        "correctOptionIndex": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdByIp": { "type": "string" },
+        "createdByImei": { "type": "string" },
+        "encryptedHash": { "type": "string" },
+        "likesCount": { "type": "integer" },
+        "reactions": { "type": "object" },
+        "commentsCount": { "type": "integer" }
+      },
+      "required": ["id", "communityId", "type", "content", "createdAt", "createdByIp", "createdByImei", "encryptedHash", "likesCount", "commentsCount"]
+    },
+    "CommunityChatComment": {
+      "title": "CommunityChatComment",
+      "description": "A comment on a specific community chat.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdByIp": { "type": "string" },
+        "createdByImei": { "type": "string" }
+      },
+      "required": ["id", "content", "createdAt", "createdByIp", "createdByImei"]
+    },
+    "CommunityVisit": {
+      "title": "CommunityVisit",
+      "description": "Tracks device entries/reviews to a community.",
+      "type": "object",
+      "properties": {
+        "ip": { "type": "string" },
+        "visitedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ip", "visitedAt"]
     }
   },
   "firestore": {
@@ -132,6 +202,22 @@
     "/interactions/{interactionId}": {
       "schema": "Interaction",
       "description": "Device-level interactions to lock state."
+    },
+    "/communities/{communityId}": {
+      "schema": "Community",
+      "description": "Top-level collection for communities."
+    },
+    "/communities/{communityId}/chats/{chatId}": {
+      "schema": "CommunityChat",
+      "description": "Chats or posts belonging to a community."
+    },
+    "/communities/{communityId}/chats/{chatId}/comments/{commentId}": {
+      "schema": "CommunityChatComment",
+      "description": "Comments belonging to a community chat."
+    },
+    "/communities/{communityId}/visits/{ip}": {
+      "schema": "CommunityVisit",
+      "description": "Visits/reviews tracker per device IP."
     }
   }
 }

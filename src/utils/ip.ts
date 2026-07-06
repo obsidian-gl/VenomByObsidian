@@ -74,3 +74,39 @@ export function getDeviceImei(): string {
   }
   return imei;
 }
+
+/**
+ * Checks if the user is on a mobile device.
+ */
+export function isMobileDevice(): boolean {
+  const ua = navigator.userAgent;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+}
+
+/**
+ * Retrieves a persistent, unique 12-character alphanumeric hardware Serial Number for PCs/Laptops/Tablets.
+ */
+export function getDeviceSerial(): string {
+  let serial = localStorage.getItem('venom_device_serial');
+  if (!serial) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = 'VM';
+    for (let i = 0; i < 10; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    serial = result;
+    localStorage.setItem('venom_device_serial', serial);
+  }
+  return serial;
+}
+
+/**
+ * Returns the active device identifier (either IMEI or Serial Number) based on device type.
+ */
+export function getDeviceIdentifier(): { type: 'IMEI' | 'SERIAL'; value: string } {
+  if (isMobileDevice()) {
+    return { type: 'IMEI', value: getDeviceImei() };
+  } else {
+    return { type: 'SERIAL', value: getDeviceSerial() };
+  }
+}

@@ -40,5 +40,25 @@ service cloud.firestore {
     match /interactions/{interactionId} {
       allow read, write: if true;
     }
+
+    // Allows tracking and managing communities
+    match /communities/{communityId} {
+      allow read, write: if true;
+
+      // Chats within a community
+      match /chats/{chatId} {
+        allow read, write: if true;
+
+        // Comments under a community chat
+        match /comments/{commentId} {
+          allow read, write: if true;
+        }
+      }
+
+      // Visits/reviews within a community
+      match /visits/{ip} {
+        allow read, write: if true;
+      }
+    }
   }
 }

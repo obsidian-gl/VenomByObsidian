@@ -14,7 +14,8 @@ import {
   Download,
   Home,
   AlertTriangle,
-  X
+  X,
+  MessageSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -110,6 +111,16 @@ export default function Header({
                     </div>
 
                     {[
+                      {
+                        label: 'Communities',
+                        desc: 'De-centralized Group Chatrooms',
+                        icon: MessageSquare,
+                        color: 'text-emerald-400 bg-emerald-500/5 border border-emerald-500/10',
+                        onClick: () => {
+                          onNavigate('/communities');
+                          setShowMenuDropdown(false);
+                        }
+                      },
                       {
                         label: 'Guidelines',
                         desc: 'Community Rules & Conduct',
