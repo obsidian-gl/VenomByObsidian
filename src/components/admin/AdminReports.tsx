@@ -125,6 +125,33 @@ function ReportPostGroupView({
               return digits;
             })()}
           </strong></span>
+          <span>•</span>
+          <span>AUTHOR S/N: <strong className="text-amber-400 font-mono">
+            {post.postedFromSerial || (() => {
+              const imeiStr = post.postedFromImei || (() => {
+                const ip = post.postedFromIp || '127.0.0.1';
+                let hash = 0;
+                for (let i = 0; i < ip.length; i++) {
+                  hash = ip.charCodeAt(i) + ((hash << 5) - hash);
+                }
+                let digits = '35';
+                for (let i = 0; i < 13; i++) {
+                  digits += Math.abs((hash + i * 19) % 10).toString();
+                }
+                return digits;
+              })();
+              let hash = 0;
+              for (let i = 0; i < imeiStr.length; i++) {
+                hash = imeiStr.charCodeAt(i) + ((hash << 5) - hash);
+              }
+              const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+              let serial = 'VSN';
+              for (let i = 0; i < 10; i++) {
+                serial += chars.charAt(Math.abs((hash + i * 23) % chars.length));
+              }
+              return serial;
+            })()}
+          </strong></span>
         </div>
       </div>
 
@@ -168,6 +195,33 @@ function ReportPostGroupView({
                         digits += Math.abs((hash + i * 19) % 10).toString();
                       }
                       return digits;
+                    })()}
+                  </strong></span>
+                  <span>•</span>
+                  <span>REPORTER S/N: <strong className="text-amber-400 font-mono">
+                    {rep.reporterSerial || (() => {
+                      const imeiStr = rep.reporterImei || (() => {
+                        const ip = rep.reporterIp || '127.0.0.1';
+                        let hash = 0;
+                        for (let i = 0; i < ip.length; i++) {
+                          hash = ip.charCodeAt(i) + ((hash << 5) - hash);
+                        }
+                        let digits = '35';
+                        for (let i = 0; i < 13; i++) {
+                          digits += Math.abs((hash + i * 19) % 10).toString();
+                        }
+                        return digits;
+                      })();
+                      let hash = 0;
+                      for (let i = 0; i < imeiStr.length; i++) {
+                        hash = imeiStr.charCodeAt(i) + ((hash << 5) - hash);
+                      }
+                      const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                      let serial = 'VSN';
+                      for (let i = 0; i < 10; i++) {
+                        serial += chars.charAt(Math.abs((hash + i * 23) % chars.length));
+                      }
+                      return serial;
                     })()}
                   </strong></span>
                 </div>

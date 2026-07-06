@@ -46,13 +46,16 @@ import {
   Trash2,
   AlertTriangle,
   Eye,
-  BookOpen
+  BookOpen,
+  Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getClientIp, getDeviceIdentifier, isMobileDevice } from '../utils/ip';
 import { generatePostHash } from '../utils/crypto';
 import { compressImageToBase64 } from '../utils/image';
 import { checkIpBlockStatus } from '../utils/blockChecker';
+import { formatTimeAgo } from '../utils/time';
+import ChatCommentsPane from './ChatCommentsPane';
 
 // Reaction Emojis
 const REACTIONS = [
@@ -138,6 +141,37 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
   const [chatComments, setChatComments] = useState<any[]>([]);
   const [newCommentContent, setNewCommentContent] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+
+  // Expanded inline comments
+  const [expandedCommentsChatId, setExpandedCommentsChatId] = useState<string | null>(null);
+
+  // Password remember state
+  const [rememberPassword, setRememberPassword] = useState(true);
+
+  // Deep linked pending scroll
+  const [pendingScrollChatId, setPendingScrollChatId] = useState<string | null>(null);
+
+  // Flying reaction emoji particles
+  const [floatingEmojisByChat, setFloatingEmojisByChat] = useState<{ [chatId: string]: any[] }>({});
+
+  const spawnFloatingEmojis = (chatId: string, emoji: string) => {
+    const newParticles = Array.from({ length: 12 }).map((_, i) => ({
+      id: Date.now() + i + Math.random(),
+      emoji,
+      x: (Math.random() - 0.5) * 140, // Nice horizontal dispersal
+      delay: Math.random() * 0.3, // Beautiful staggered release
+    }));
+    setFloatingEmojisByChat((prev) => ({
+      ...prev,
+      [chatId]: [...(prev[chatId] || []), ...newParticles],
+    }));
+    setTimeout(() => {
+      setFloatingEmojisByChat((prev) => {
+        const remaining = (prev[chatId] || []).filter((p) => !newParticles.find((np) => np.id === p.id));
+        return { ...prev, [chatId]: remaining };
+      });
+    }, 2500);
+  };
 
   // Reaction dropdown active pointer
   const [reactionMenuChatId, setReactionMenuChatId] = useState<string | null>(null);
@@ -240,17 +274,35 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
       setChats(list);
       setLoadingChats(false);
 
-      // Auto-scroll to bottom of chat
-      setTimeout(() => {
-        chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 300);
+      // Scroll to specific deep-linked chat or bottom
+      const currentParams = new URLSearchParams(window.location.search);
+      const urlChatId = currentParams.get('chatId');
+      const targetScrollId = pendingScrollChatId || urlChatId;
+
+      if (targetScrollId) {
+        setTimeout(() => {
+          const targetMessage = document.getElementById(`chat-${targetScrollId}`);
+          if (targetMessage) {
+            targetMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            targetMessage.classList.add('animate-pulse', 'border-emerald-400', 'shadow-[0_0_15px_rgba(16,185,129,0.3)]');
+            setTimeout(() => {
+              targetMessage.classList.remove('animate-pulse', 'border-emerald-400', 'shadow-[0_0_15px_rgba(16,185,129,0.3)]');
+            }, 3000);
+            setPendingScrollChatId(null);
+          }
+        }, 500);
+      } else {
+        setTimeout(() => {
+          chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 300);
+      }
     }, (error) => {
       console.error('Error fetching chats:', error);
       setLoadingChats(false);
     });
 
     return () => unsubscribe();
-  }, [activeCommunity]);
+  }, [activeCommunity, pendingScrollChatId]);
 
   // Listen to Comments for the active selected chat
   useEffect(() => {
@@ -303,6 +355,9 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
   const handleEnterCommunityDirect = async (comm: any, sharedChatId?: string | null) => {
     try {
       setActiveCommunity(comm);
+      if (sharedChatId) {
+        setPendingScrollChatId(sharedChatId);
+      }
 
       // Record visit dynamically (using device IP)
       if (deviceIp) {
@@ -702,17 +757,20 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
   };
 
   // Submit report on a community (100 auto block threshold)
-  const handleReportCommunity = async () => {
-    if (!activeCommunity) return;
+  const handleReportCommunity = async (commId?: string, commName?: string) => {
+    const targetId = commId || activeCommunity?.id;
+    const targetName = commName || activeCommunity?.name;
+    if (!targetId || !targetName) return;
 
-    const confirmReport = window.confirm('Are you absolutely sure you want to flag and report this community for policy violation?');
+    const confirmReport = window.confirm(`Are you absolutely sure you want to flag and report the community "${targetName}" for policy violation?`);
     if (!confirmReport) return;
 
     try {
-      const commDocRef = doc(db, 'communities', activeCommunity.id);
+      const commDocRef = doc(db, 'communities', targetId);
 
       // Increment reportsCount
-      const newReportCount = (activeCommunity.reportsCount || 0) + 1;
+      const currentComm = commId ? communities.find(c => c.id === commId) : activeCommunity;
+      const newReportCount = ((currentComm?.reportsCount || 0) + 1);
       
       const updatePayload: any = {
         reportsCount: increment(1)
@@ -728,8 +786,8 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
       const reportRef = doc(collection(db, 'reports'));
       await setDoc(reportRef, {
         id: reportRef.id,
-        communityId: activeCommunity.id,
-        communityName: activeCommunity.name,
+        communityId: targetId,
+        communityName: targetName,
         reason: 'Community Violations (Flagged by Users)',
         opinion: 'Filer reporting illicit activities.',
         createdAt: new Date().toISOString(),
@@ -737,14 +795,49 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
         imei: deviceSig.value
       });
 
-      alert(`Report submitted successfully. Current Flags: ${newReportCount}/100. Thank you for securing Obsidian.`);
+      alert(`Report submitted successfully for "${targetName}". Thank you for securing Obsidian.`);
 
       if (newReportCount >= 100) {
         alert('THRESHOLD EXCEEDED: This community has been automatically quarantined and blocked.');
-        setActiveCommunity(null);
+        if (activeCommunity?.id === targetId) {
+          setActiveCommunity(null);
+        }
       }
     } catch (err) {
       console.error('Report submission failed:', err);
+    }
+  };
+
+  // Submit report on a community chat message
+  const handleReportChat = async (chatId: string, contentSummary: string) => {
+    if (!activeCommunity) return;
+
+    const confirmReport = window.confirm('Are you absolutely sure you want to flag and report this message for policy violation?');
+    if (!confirmReport) return;
+
+    try {
+      const chatDocRef = doc(db, 'communities', activeCommunity.id, 'chats', chatId);
+      await updateDoc(chatDocRef, {
+        reportsCount: increment(1)
+      });
+
+      const reportRef = doc(collection(db, 'reports'));
+      await setDoc(reportRef, {
+        id: reportRef.id,
+        communityId: activeCommunity.id,
+        communityName: activeCommunity.name,
+        chatId: chatId,
+        chatContent: contentSummary,
+        reason: 'Community Message Violations (Flagged by Users)',
+        opinion: 'Filer reporting illicit chat content.',
+        createdAt: new Date().toISOString(),
+        ip: deviceIp,
+        imei: deviceSig.value
+      });
+
+      alert('Report submitted successfully. Thank you for keeping the grid secure.');
+    } catch (err) {
+      console.error('Chat report failed:', err);
     }
   };
 
@@ -943,41 +1036,46 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
                 <div
                   key={comm.id}
                   onClick={() => {
-                    if (comm.password) {
+                    if (comm.password && localStorage.getItem(`unlocked_comm_${comm.id}`) !== 'true' && comm.createdByImei !== deviceSig.value) {
                       setShowPasswordGate(comm);
                     } else {
                       handleEnterCommunityDirect(comm);
                     }
                   }}
-                  className={`border rounded-xl p-3.5 bg-zinc-950/50 hover:bg-zinc-900/30 transition-all cursor-pointer relative group flex items-start gap-3.5 ${
-                    isPinned ? 'border-emerald-500/20' : 'border-zinc-900'
+                  className={`border rounded-xl p-3.5 bg-zinc-950/50 hover:bg-zinc-900/30 transition-all cursor-pointer relative group flex flex-col gap-3 ${
+                    isPinned ? 'border-emerald-500/20 shadow-[0_0_12px_rgba(16,185,129,0.05)]' : 'border-zinc-900'
                   }`}
                 >
-                  {/* Community Profile Image */}
-                  <img
-                    src={comm.imageUrl}
-                    alt={comm.name}
-                    className="w-12 h-12 rounded-xl object-cover bg-zinc-900 border border-zinc-800 shrink-0 shadow-inner group-hover:scale-105 transition-transform"
-                    referrerPolicy="no-referrer"
-                  />
+                  <div className="flex items-start gap-3.5 w-full">
+                    {/* Community Profile Image */}
+                    <img
+                      src={comm.imageUrl}
+                      alt={comm.name}
+                      className="w-12 h-12 rounded-xl object-cover bg-zinc-900 border border-zinc-800 shrink-0 shadow-inner group-hover:scale-105 transition-transform"
+                      referrerPolicy="no-referrer"
+                    />
 
-                  {/* Details */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-1.5">
-                      <h3 className="text-sm font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors truncate">
-                        {comm.name}
-                      </h3>
-                      <div className="flex items-center gap-1">
-                        {comm.password && <Lock className="w-3 h-3 text-emerald-400 shrink-0" />}
-                        {isPinned && <Pin className="w-3 h-3 text-emerald-400 fill-emerald-400 shrink-0" />}
+                    {/* Details */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1.5 w-full">
+                        <h3 className="text-sm font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors truncate">
+                          {comm.name}
+                        </h3>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {comm.password && <Lock className="w-3 h-3 text-emerald-400 shrink-0" />}
+                          {isPinned && <Pin className="w-3 h-3 text-emerald-400 fill-emerald-400 shrink-0" />}
+                        </div>
                       </div>
+
+                      <p className="text-xs text-zinc-500 line-clamp-2 mt-1 leading-relaxed break-words">
+                        {comm.description}
+                      </p>
                     </div>
+                  </div>
 
-                    <p className="text-xs text-zinc-500 line-clamp-2 mt-1 leading-relaxed">
-                      {comm.description}
-                    </p>
-
-                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  {/* Actions & Meta Footer */}
+                  <div className="flex items-center justify-between pt-2.5 border-t border-zinc-900/60 w-full flex-wrap gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-[9px] font-mono bg-zinc-900 px-2 py-0.5 rounded text-zinc-400 flex items-center gap-1">
                         <Globe className="w-2.5 h-2.5 text-emerald-500" />
                         <span>{comm.religion}</span>
@@ -991,33 +1089,56 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
                           Limit: {comm.userLimit}
                         </span>
                       )}
+                      <span className="text-[9px] font-mono text-zinc-500 flex items-center gap-1 ml-0.5">
+                        <Clock className="w-2.5 h-2.5 text-zinc-650" />
+                        <span>{formatTimeAgo(comm.createdAt)}</span>
+                      </span>
                     </div>
-                  </div>
 
-                  {/* Floating Action Overlay */}
-                  <div className="absolute right-3 top-3.5 opacity-0 group-hover:opacity-100 flex items-center gap-1.5 transition-opacity">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const shareLink = `${window.location.origin}/communities?communityId=${comm.id}`;
-                        navigator.clipboard.writeText(shareLink).then(() => {
-                          alert('COPILOT SYNC: Shared community deep link has been copied to your clipboard!');
-                        }).catch(() => {
-                          alert(`Link: ${shareLink}`);
-                        });
-                      }}
-                      className="p-1 text-zinc-500 hover:text-emerald-400 transition-colors"
-                      title="Share community deep link"
-                    >
-                      <Share2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={(e) => handleTogglePin(e, comm.id)}
-                      className="p-1 text-zinc-500 hover:text-emerald-400 transition-colors"
-                      title={isPinned ? 'Unpin community' : 'Pin community'}
-                    >
-                      <Pin className={`w-3.5 h-3.5 ${isPinned ? 'fill-emerald-400 text-emerald-400' : ''}`} />
-                    </button>
+                    {/* Controls always visible */}
+                    <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                      {/* Share Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const shareLink = `${window.location.origin}/communities?communityId=${comm.id}`;
+                          navigator.clipboard.writeText(shareLink).then(() => {
+                            alert('COPILOT SYNC: Shared community deep link has been copied to your clipboard!');
+                          }).catch(() => {
+                            alert(`Link: ${shareLink}`);
+                          });
+                        }}
+                        className="p-1.5 border border-zinc-850 bg-zinc-900 rounded hover:bg-zinc-850 hover:text-emerald-400 transition-colors text-zinc-500 cursor-pointer"
+                        title="Share community deep link"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Pin Button */}
+                      <button
+                        onClick={(e) => handleTogglePin(e, comm.id)}
+                        className={`p-1.5 border rounded transition-colors cursor-pointer ${
+                          isPinned 
+                            ? 'bg-emerald-950/40 border-emerald-550/30 text-emerald-400' 
+                            : 'bg-zinc-900 border-zinc-850 text-zinc-500 hover:bg-zinc-850 hover:text-emerald-400'
+                        }`}
+                        title={isPinned ? 'Unpin community' : 'Pin community'}
+                      >
+                        <Pin className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Report Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleReportCommunity(comm.id, comm.name);
+                        }}
+                        className="p-1.5 border border-zinc-850 bg-zinc-900 rounded hover:bg-zinc-850 hover:text-rose-450 transition-colors text-zinc-500 cursor-pointer"
+                        title="Report community"
+                      >
+                        <Flag className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -1029,8 +1150,11 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
       {/* RIGHT PANEL: CHATROOM WORKSPACE (WhatsApp styled) */}
       <div className={`flex-1 bg-zinc-950 flex flex-col h-[calc(100vh-4rem)] md:h-screen ${activeCommunity ? 'flex' : 'hidden md:flex items-center justify-center p-8 bg-[#020202]'}`}>
         
-        {activeCommunity ? (
-          <>
+        {activeCommunity ? (() => {
+          const isOwner = activeCommunity.createdByImei === deviceSig.value;
+          const canPost = activeCommunity.allowUserPost || isOwner;
+          return (
+            <>
             {/* Top Workspace Header */}
             <div className="px-4 py-3 border-b border-zinc-900/80 bg-zinc-950 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3 min-w-0">
@@ -1097,15 +1221,45 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
             {/* Chat message feed space */}
             <div 
               ref={chatListRef}
-              className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 bg-zinc-950 bg-[radial-gradient(#121212_1px,transparent_1px)] [background-size:16px_16px]"
+              className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 bg-zinc-950 bg-[radial-gradient(#121212_1px,transparent_1px)] [background-size:16px_16px] relative overflow-x-hidden"
             >
+              {/* Premium Drifting Background Ambient Orbs */}
+              <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+                <motion.div 
+                  animate={{
+                    x: [0, 80, -40, 0],
+                    y: [0, -60, 40, 0],
+                    scale: [1, 1.15, 0.9, 1],
+                  }}
+                  transition={{
+                    duration: 25,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                  className="absolute top-[20%] left-[10%] w-72 h-72 rounded-full bg-emerald-500/5 blur-[120px]"
+                />
+                <motion.div 
+                  animate={{
+                    x: [0, -90, 50, 0],
+                    y: [0, 80, -70, 0],
+                    scale: [1, 0.85, 1.2, 1],
+                  }}
+                  transition={{
+                    duration: 30,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                  className="absolute bottom-[20%] right-[15%] w-80 h-80 rounded-full bg-teal-500/5 blur-[130px]"
+                />
+              </div>
+
               {loadingChats ? (
-                <div className="flex flex-col items-center justify-center py-24 text-zinc-500 font-mono text-[10px]">
+                <div className="flex flex-col items-center justify-center py-24 text-zinc-500 font-mono text-[10px] relative z-10">
                   <span className="animate-spin text-emerald-400 mb-2">●</span>
                   <span>SYNCING CRYPTO CHATS...</span>
                 </div>
               ) : chats.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-24 text-zinc-500 font-mono text-[10px] space-y-2 max-w-sm mx-auto text-center leading-relaxed">
+                <div className="flex flex-col items-center justify-center py-24 text-zinc-500 font-mono text-[10px] space-y-2 max-w-sm mx-auto text-center leading-relaxed relative z-10">
                   <BookOpen className="w-8 h-8 text-zinc-700" />
                   <span>GRID SECURELY INITIALISED</span>
                   <span>Welcome to the secure encryption pipeline. No dispatches have been posted here yet.</span>
@@ -1120,16 +1274,26 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
                     <div
                       key={chat.id}
                       id={`chat-${chat.id}`}
-                      className={`flex flex-col max-w-md md:max-w-xl border border-zinc-900 bg-zinc-950/60 p-3.5 rounded-2xl relative transition-all shadow-md group/chat ${
+                      className={`flex flex-col max-w-md md:max-w-xl border border-zinc-900 bg-zinc-950/80 p-3.5 rounded-2xl relative transition-all shadow-md group/chat z-10 ${
                         isUserSender ? 'ml-auto border-emerald-500/10 bg-emerald-500/[0.01]' : 'mr-auto'
                       }`}
                     >
                       {/* Top metadata tags */}
-                      <div className="flex items-center justify-between text-[9px] font-mono text-zinc-500 mb-1.5 gap-4">
-                        <span className="font-bold truncate text-zinc-400">
-                          {isUserSender ? 'YOU (OWNER)' : `ANONYMOUS MEMBER (${chat.createdByIp || '0.0.0.0'})`}
+                      <div className="flex items-center justify-between text-[9px] font-mono text-zinc-500 mb-1.5 gap-4 relative z-10">
+                        <span className="font-bold truncate text-zinc-400 flex items-center gap-1.5">
+                          {chat.createdByImei === activeCommunity.createdByImei ? (
+                            <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">
+                              OWNER
+                            </span>
+                          ) : (
+                            <span className="bg-zinc-900 text-zinc-400 border border-zinc-800 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">
+                              USER
+                            </span>
+                          )}
+                          {isUserSender && <span className="text-zinc-600 font-bold">(YOU)</span>}
                         </span>
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0 text-zinc-500">
+                          <span>{formatTimeAgo(chat.createdAt)}</span>
                           <span className="bg-zinc-900 border border-zinc-850 px-1.5 py-0.5 rounded">
                             {chat.encryptedHash?.substring(0, 8)}
                           </span>
@@ -1222,12 +1386,44 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
                         </div>
                       )}
 
+                      {/* Floating Emojis Animation particles container */}
+                      <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl z-50">
+                        <AnimatePresence>
+                          {(floatingEmojisByChat[chat.id] || []).map((particle) => (
+                            <motion.div
+                              key={particle.id}
+                              initial={{ opacity: 1, y: 50, scale: 0.8 }}
+                              animate={{ 
+                                opacity: 0, 
+                                y: -150, 
+                                x: particle.x, 
+                                scale: [1, 1.6, 0.5] 
+                              }}
+                              exit={{ opacity: 0 }}
+                              transition={{ 
+                                duration: 2.0, 
+                                delay: particle.delay,
+                                ease: "easeOut"
+                              }}
+                              className="absolute bottom-4 left-1/2 text-2xl select-none"
+                            >
+                              {particle.emoji}
+                            </motion.div>
+                          ))}
+                        </AnimatePresence>
+                      </div>
+
                       {/* Micro interaction buttons row */}
-                      <div className="mt-3.5 border-t border-zinc-900/60 pt-2.5 flex items-center gap-4 text-zinc-500 select-none">
+                      <div className="mt-3.5 border-t border-zinc-900/60 pt-2.5 flex items-center gap-4 text-zinc-500 select-none relative z-10">
                         
                         {/* Like icon */}
                         <button
-                          onClick={() => handleLikeChat(chat.id)}
+                          onClick={() => {
+                            handleLikeChat(chat.id);
+                            if (!likedChats.includes(chat.id)) {
+                              spawnFloatingEmojis(chat.id, '💚');
+                            }
+                          }}
                           className={`flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer ${
                             hasUserLiked ? 'text-emerald-400' : 'hover:text-zinc-300'
                           }`}
@@ -1260,7 +1456,11 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
                                   {REACTIONS.map((r) => (
                                     <button
                                       key={r.key}
-                                      onClick={() => handleReactChat(chat.id, r.key)}
+                                      onClick={() => {
+                                        handleReactChat(chat.id, r.key);
+                                        spawnFloatingEmojis(chat.id, r.emoji);
+                                        setReactionMenuChatId(null);
+                                      }}
                                       className="hover:scale-125 transition-transform p-1 text-base cursor-pointer"
                                       title={r.key}
                                     >
@@ -1279,18 +1479,35 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
                             const count = chat.reactions?.[r.key] || 0;
                             if (count <= 0) return null;
                             return (
-                              <span key={r.key} className="text-[10px] bg-zinc-900/60 border border-zinc-850 px-1 py-0.5 rounded flex items-center gap-0.5">
+                              <button 
+                                key={r.key} 
+                                onClick={() => {
+                                  handleReactChat(chat.id, r.key);
+                                  spawnFloatingEmojis(chat.id, r.emoji);
+                                }}
+                                className="text-[10px] bg-zinc-900/60 border border-zinc-850 px-1 py-0.5 rounded flex items-center gap-0.5 hover:bg-zinc-800 transition-colors"
+                              >
                                 <span>{r.emoji}</span>
                                 <span className="text-zinc-500 font-bold">{count}</span>
-                              </span>
+                              </button>
                             );
                           })}
                         </div>
 
                         {/* Comments button */}
                         <button
-                          onClick={() => setCommentingOnChat(chat)}
-                          className="flex items-center gap-1 text-[10px] font-mono font-bold hover:text-zinc-300 transition-colors ml-auto cursor-pointer"
+                          onClick={() => {
+                            const nextVal = expandedCommentsChatId === chat.id ? null : chat.id;
+                            setExpandedCommentsChatId(nextVal);
+                            if (nextVal) {
+                              setTimeout(() => {
+                                document.getElementById(`chat-${chat.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                              }, 300);
+                            }
+                          }}
+                          className={`flex items-center gap-1 text-[10px] font-mono font-bold transition-colors ml-auto cursor-pointer ${
+                            expandedCommentsChatId === chat.id ? 'text-emerald-400 font-bold' : 'hover:text-zinc-300 text-zinc-500'
+                          }`}
                         >
                           <MessageSquare className="w-3.5 h-3.5" />
                           <span>{chat.commentsCount || 0}</span>
@@ -1304,12 +1521,34 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
                         >
                           <Share2 className="w-3.5 h-3.5" />
                         </button>
+
+                        {/* Report button */}
+                        <button
+                          onClick={() => handleReportChat(chat.id, chat.content || '[Attached Graphic]')}
+                          className="p-1 text-zinc-500 hover:text-rose-400 transition-colors cursor-pointer"
+                          title="Report Chat Message Violation"
+                        >
+                          <Flag className="w-3.5 h-3.5" />
+                        </button>
                       </div>
 
-                      {/* Time tag (neatly formatted, bottom group-hover display) */}
-                      <span className="text-[8px] font-mono text-zinc-600 absolute right-3 bottom-1 opacity-0 group-hover/chat:opacity-100 transition-opacity">
-                        {chat.createdAt ? new Date(chat.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Pending'}
-                      </span>
+                      {/* Expandable Comments Section */}
+                      <AnimatePresence>
+                        {expandedCommentsChatId === chat.id && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.25, ease: 'easeInOut' }}
+                            className="overflow-hidden mt-3 pt-3 border-t border-zinc-900 bg-zinc-950/20 rounded-xl relative z-10"
+                          >
+                            <ChatCommentsPane 
+                              communityId={activeCommunity.id} 
+                              chatId={chat.id} 
+                            />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   );
                 })
@@ -1508,7 +1747,8 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
               </div>
             </form>
           </>
-        ) : (
+          );
+        })() : (
           <div className="text-center space-y-3">
             <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-850 flex items-center justify-center mx-auto text-emerald-400">
               <Users className="w-6 h-6" />

@@ -229,9 +229,10 @@ export default function App() {
         if (!sessionStarted) {
           sessionStorage.setItem('venom_main_session_active', 'true');
           sessionStorage.removeItem('venom_admin_session_active'); // Keep separate
-          // For a fresh session of Main PWA, force the route to / and preserve query parameters
-          window.history.replaceState({}, '', `/${search}`);
-          setCurrentPath(`/${search}`);
+          // For a fresh session of Main PWA, preserve the actual pathname and query parameters
+          const actualPathname = window.location.pathname;
+          window.history.replaceState({}, '', `${actualPathname}${search}`);
+          setCurrentPath(`${actualPathname}${search}`);
         }
       }
     }

@@ -457,7 +457,22 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
                         </div>
                         <div>
                           <span className="text-[8px] text-zinc-600 block uppercase">CREATOR IMEI / SN</span>
-                          <span className="text-[10px] font-bold text-zinc-400 truncate block max-w-xs">{selectedComm.createdByImei || 'N/A'}</span>
+                          <span className="text-[10px] font-bold text-zinc-400 truncate block max-w-xs">
+                            {selectedComm.createdByImei || 'N/A'} 
+                            {selectedComm.createdByImei && ` | ` + (() => {
+                              const creatorImei = selectedComm.createdByImei;
+                              let hash = 0;
+                              for (let i = 0; i < creatorImei.length; i++) {
+                                hash = creatorImei.charCodeAt(i) + ((hash << 5) - hash);
+                              }
+                              const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                              let creatorSerial = 'VSN';
+                              for (let i = 0; i < 10; i++) {
+                                creatorSerial += chars.charAt(Math.abs((hash + i * 23) % chars.length));
+                              }
+                              return creatorSerial;
+                            })()}
+                          </span>
                         </div>
                         <div>
                           <span className="text-[8px] text-zinc-600 block uppercase">GATE LOCK</span>
@@ -479,16 +494,28 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
                       ) : activeChats.length === 0 ? (
                         <div className="text-center py-12 text-zinc-600 text-[10px] uppercase">COHORT DISPATCH SHELL IS EMPTY</div>
                       ) : (
-                        activeChats.map((chat) => (
-                          <div
-                            key={chat.id}
-                            className="p-3 bg-zinc-950 border border-zinc-900 hover:border-zinc-850 rounded-lg transition-all flex items-start gap-4 relative"
-                          >
-                            <div className="min-w-0 flex-1 space-y-1.5">
-                              <div className="flex justify-between items-center text-[8px] font-mono text-zinc-600">
-                                <span>DISPATCHER IP: {chat.createdByIp || 'N/A'}</span>
-                                <span>IMEI/SN: {chat.createdByImei || 'N/A'}</span>
-                              </div>
+                        activeChats.map((chat) => {
+                          const dispatcherImei = chat.createdByImei || '359182371283718';
+                          let dispHash = 0;
+                          for (let i = 0; i < dispatcherImei.length; i++) {
+                            dispHash = dispatcherImei.charCodeAt(i) + ((dispHash << 5) - dispHash);
+                          }
+                          const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                          let dispatcherSerial = 'VSN';
+                          for (let i = 0; i < 10; i++) {
+                            dispatcherSerial += chars.charAt(Math.abs((dispHash + i * 23) % chars.length));
+                          }
+
+                          return (
+                            <div
+                              key={chat.id}
+                              className="p-3 bg-zinc-950 border border-zinc-900 hover:border-zinc-850 rounded-lg transition-all flex items-start gap-4 relative"
+                            >
+                              <div className="min-w-0 flex-1 space-y-1.5">
+                                <div className="flex justify-between items-center text-[8px] font-mono text-zinc-600">
+                                  <span>DISPATCHER IP: {chat.createdByIp || 'N/A'}</span>
+                                  <span>IMEI: {chat.createdByImei || 'N/A'} | S/N: {dispatcherSerial}</span>
+                                </div>
 
                               <p className="text-[11px] text-zinc-300 whitespace-pre-wrap font-sans">
                                 {chat.content}
@@ -518,7 +545,7 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                        ))
+                        )})
                       )}
                     </div>
                   </>

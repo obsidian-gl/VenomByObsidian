@@ -112,6 +112,20 @@ export const AdminPosts: React.FC<AdminPostsProps> = ({ posts, onStartEdit, onBl
               return digits;
             })();
 
+            const resolvedSerial = post.postedFromSerial || (() => {
+              const imeiStr = resolvedImei || '359182371283718';
+              let hash = 0;
+              for (let i = 0; i < imeiStr.length; i++) {
+                hash = imeiStr.charCodeAt(i) + ((hash << 5) - hash);
+              }
+              const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+              let serial = 'VSN';
+              for (let i = 0; i < 10; i++) {
+                serial += chars.charAt(Math.abs((hash + i * 23) % chars.length));
+              }
+              return serial;
+            })();
+
             return (
               <div 
                 key={post.id} 
@@ -185,6 +199,9 @@ export const AdminPosts: React.FC<AdminPostsProps> = ({ posts, onStartEdit, onBl
                       </span>
                       <span className="text-rose-400 font-bold bg-rose-950/20 border border-rose-500/25 px-2 py-0.5 rounded">
                         IMEI: {resolvedImei}
+                      </span>
+                      <span className="text-amber-400 font-bold bg-amber-950/20 border border-amber-500/25 px-2 py-0.5 rounded">
+                        S/N: {resolvedSerial}
                       </span>
                       <span className="text-zinc-400 bg-zinc-950 border border-zinc-900 px-2 py-0.5 rounded truncate max-w-[280px]" title={post.postedFromDevice}>
                         {post.postedFromDevice || 'Unknown Operating System'}
