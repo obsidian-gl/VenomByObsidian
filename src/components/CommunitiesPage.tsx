@@ -61,6 +61,7 @@ import { compressImageToBase64 } from '../utils/image';
 import { checkIpBlockStatus } from '../utils/blockChecker';
 import { formatTimeAgo } from '../utils/time';
 import ChatCommentsPane from './ChatCommentsPane';
+import { MobileBottomBar } from './MobileBottomBar';
 
 // Reaction Emojis
 const REACTIONS = [
@@ -88,6 +89,7 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
   const [shareModalUrl, setShareModalUrl] = useState('');
   const [shareModalPreview, setShareModalPreview] = useState('');
   const [isCopiedLink, setIsCopiedLink] = useState(false);
+  const [shareModalFormattedMessage, setShareModalFormattedMessage] = useState('');
 
   // Pinned communities local storage state (maximum 5)
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
@@ -366,9 +368,15 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
       if (targetComm && !isBlocked) {
         setInitialDeepLinkProcessed(true);
 
-        // If password is set on shared community, open password gate
-        if (targetComm.password) {
-          setShowPasswordGate(targetComm);
+        // If password is set on shared community, check if unlocked with current password
+        if (targetComm.password && targetComm.createdByImei !== deviceSig.value) {
+          const isUnlocked = localStorage.getItem(`unlocked_comm_${targetComm.id}`) === 'true';
+          const storedPwd = localStorage.getItem(`unlocked_comm_pwd_${targetComm.id}`) || '';
+          if (!isUnlocked || storedPwd !== targetComm.password) {
+            setShowPasswordGate(targetComm);
+          } else {
+            handleEnterCommunityDirect(targetComm, sharedChatId);
+          }
         } else {
           // Join the community automatically
           handleEnterCommunityDirect(targetComm, sharedChatId);
@@ -594,8 +602,10 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
       const targetComm = showPasswordGate;
       if (rememberPassword) {
         localStorage.setItem(`unlocked_comm_${targetComm.id}`, 'true');
+        localStorage.setItem(`unlocked_comm_pwd_${targetComm.id}`, targetComm.password);
       } else {
         localStorage.removeItem(`unlocked_comm_${targetComm.id}`);
+        localStorage.removeItem(`unlocked_comm_pwd_${targetComm.id}`);
       }
       setShowPasswordGate(null);
       setGatePasswordInput('');
@@ -834,8 +844,13 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
   // Handle Submit from report modal
   const handleReportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reportOpinion.trim()) {
-      setReportError('Please provide your opinion or details of the violation.');
+    
+    const isChat = reportTargetType === 'chat';
+    const targetId = reportTargetId;
+    const deviceReportKey = isChat ? `reported_chat_${reportChatId}` : `reported_comm_${targetId}`;
+    
+    if (localStorage.getItem(deviceReportKey) === 'true') {
+      setReportError('POLICY SHIELD: You can submit a report for this specific content only once from this device.');
       return;
     }
 
@@ -843,9 +858,6 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
     setReportError('');
 
     try {
-      const isChat = reportTargetType === 'chat';
-      const targetId = reportTargetId;
-
       if (isChat) {
         // Increment reportsCount on the chat doc
         const chatDocRef = doc(db, 'communities', targetId, 'chats', reportChatId);
@@ -876,7 +888,7 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
         communityId: targetId,
         communityName: reportTargetName,
         reason: reportReason,
-        opinion: reportOpinion.trim(),
+        opinion: reportOpinion ? reportOpinion.trim() : 'No additional details provided.',
         createdAt: new Date().toISOString(),
         ip: deviceIp,
         imei: deviceSig.value
@@ -888,6 +900,9 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
       }
 
       await setDoc(reportRef, reportPayload);
+
+      // Lock reporting for this content on this device
+      localStorage.setItem(deviceReportKey, 'true');
 
       setReportSuccess('Report submitted successfully. Thank you for keeping the grid secure.');
 
@@ -917,9 +932,27 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
     const chatObj = chats.find(c => c.id === chatId);
     const contentText = chatObj?.content || 'Attached payload/graphic';
     
+    // Format a beautiful, highly detailed share message matching the exact user template
+    const rawType = chatObj?.type || 'text';
+    const typeLabel = rawType === 'qa' ? 'Q&A' : rawType.charAt(0).toUpperCase() + rawType.slice(1);
+    const chatTitle = chatObj?.content ? `"${chatObj.content}"` : '"Attached Graphic"';
+    const chatDesc = chatObj?.imageUrl ? '"Image Attachment"' : rawType === 'poll' ? '"Interactive Poll"' : rawType === 'qa' ? '"Q&A Board"' : '"Text Dispatch"';
+
+    const formattedMessage = `Venom
+${activeCommunity.name}
+${activeCommunity.description}
+
+Review This Chat (Type of chat: ${typeLabel}):
+${chatTitle}
+${chatDesc}
+Link: ${shareLink}
+
+Post Venom Now : https://myvenom.vercel.app`;
+
     setShareModalTitle('Share Chat Message');
     setShareModalUrl(shareLink);
     setShareModalPreview(contentText);
+    setShareModalFormattedMessage(formattedMessage);
     setIsCopiedLink(false);
     setShowShareModal(true);
   };
@@ -929,9 +962,18 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
     if (!activeCommunity) return;
     const shareLink = `${window.location.origin}/communities?communityId=${activeCommunity.id}`;
     
+    const formattedMessage = `Venom
+${activeCommunity.name}
+${activeCommunity.description}
+Total Review: ${activeCommunity.viewsCount || 0}
+Review Community Now : ${shareLink}
+
+Post Venom : https://myvenom.vercel.app`;
+
     setShareModalTitle(`Share Community: ${activeCommunity.name}`);
     setShareModalUrl(shareLink);
     setShareModalPreview(activeCommunity.description || 'Secure Cognitive Cohort on Venom Grid');
+    setShareModalFormattedMessage(formattedMessage);
     setIsCopiedLink(false);
     setShowShareModal(true);
   };
@@ -941,19 +983,19 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
       name: 'WhatsApp',
       icon: MessageCircle,
       color: 'hover:text-green-400 hover:border-green-500/30 text-emerald-500/70 hover:bg-green-950/15',
-      url: `https://api.whatsapp.com/send?text=${encodeURIComponent(`${shareModalTitle}: ${shareModalPreview} \nSecure Link: ${shareModalUrl}`)}`
+      url: `https://api.whatsapp.com/send?text=${encodeURIComponent(shareModalFormattedMessage)}`
     },
     {
       name: 'X / Twitter',
       icon: Twitter,
       color: 'hover:text-sky-400 hover:border-sky-500/30 text-emerald-500/70 hover:bg-sky-950/15',
-      url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(`${shareModalTitle}: ${shareModalPreview}`)}&url=${encodeURIComponent(shareModalUrl)}`
+      url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareModalFormattedMessage)}`
     },
     {
       name: 'Telegram',
       icon: Send,
       color: 'hover:text-blue-400 hover:border-blue-500/30 text-emerald-500/70 hover:bg-blue-950/15',
-      url: `https://t.me/share/url?url=${encodeURIComponent(shareModalUrl)}&text=${encodeURIComponent(`${shareModalTitle}: ${shareModalPreview}`)}`
+      url: `https://t.me/share/url?url=${encodeURIComponent(shareModalUrl)}&text=${encodeURIComponent(shareModalFormattedMessage)}`
     },
     {
       name: 'Reddit',
@@ -970,7 +1012,7 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
   ];
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(shareModalUrl).then(() => {
+    navigator.clipboard.writeText(shareModalFormattedMessage).then(() => {
       setIsCopiedLink(true);
       setTimeout(() => setIsCopiedLink(false), 2000);
     });
@@ -981,7 +1023,7 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
       try {
         await navigator.share({
           title: `Venom Community — ${shareModalTitle}`,
-          text: `${shareModalTitle}: ${shareModalPreview}`,
+          text: shareModalFormattedMessage,
           url: shareModalUrl,
         });
       } catch (err) {
@@ -1174,8 +1216,16 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
                 <div
                   key={comm.id}
                   onClick={() => {
-                    if (comm.password && localStorage.getItem(`unlocked_comm_${comm.id}`) !== 'true' && comm.createdByImei !== deviceSig.value) {
-                      setShowPasswordGate(comm);
+                    const isUnlocked = localStorage.getItem(`unlocked_comm_${comm.id}`) === 'true';
+                    const storedPwd = localStorage.getItem(`unlocked_comm_pwd_${comm.id}`) || '';
+                    const isCreator = comm.createdByImei === deviceSig.value;
+
+                    if (comm.password && !isCreator) {
+                      if (!isUnlocked || storedPwd !== comm.password) {
+                        setShowPasswordGate(comm);
+                      } else {
+                        handleEnterCommunityDirect(comm);
+                      }
                     } else {
                       handleEnterCommunityDirect(comm);
                     }
@@ -1240,8 +1290,16 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
                         onClick={(e) => {
                           e.stopPropagation();
                           const shareLink = `${window.location.origin}/communities?communityId=${comm.id}`;
-                          navigator.clipboard.writeText(shareLink).then(() => {
-                            alert('COPILOT SYNC: Shared community deep link has been copied to your clipboard!');
+                          const formattedMessage = `Venom
+${comm.name}
+${comm.description}
+Total Review: ${comm.viewsCount || 0}
+Review Community Now : ${shareLink}
+
+Post Venom : https://myvenom.vercel.app`;
+
+                          navigator.clipboard.writeText(formattedMessage).then(() => {
+                            alert('COPILOT SYNC: Shared community information has been copied to your clipboard!');
                           }).catch(() => {
                             alert(`Link: ${shareLink}`);
                           });
@@ -1429,12 +1487,28 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
                             </span>
                           )}
                           {isUserSender && <span className="text-zinc-600 font-bold">(YOU)</span>}
+                          
+                          {/* Report button placed upper beside OWNER / USER badges */}
+                          <button
+                            onClick={() => handleReportChat(chat.id, chat.content || '[Attached Graphic]')}
+                            className="p-1 text-zinc-600 hover:text-rose-400 transition-colors cursor-pointer"
+                            title="Report Chat Message Violation"
+                          >
+                            <Flag className="w-3 h-3" />
+                          </button>
                         </span>
+                        
                         <div className="flex items-center gap-1.5 shrink-0 text-zinc-500">
                           <span>{formatTimeAgo(chat.createdAt)}</span>
-                          <span className="bg-zinc-900 border border-zinc-850 px-1.5 py-0.5 rounded">
-                            {chat.encryptedHash?.substring(0, 8)}
-                          </span>
+                          
+                          {/* Share button moved next to the timeline, replacing Post ID */}
+                          <button
+                            onClick={() => handleShareChat(chat.id)}
+                            className="p-1 text-zinc-500 hover:text-emerald-400 transition-colors cursor-pointer"
+                            title="Share Chat Cryptographic Link"
+                          >
+                            <Share2 className="w-3 h-3" />
+                          </button>
                         </div>
                       </div>
 
@@ -1524,26 +1598,23 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
                         </div>
                       )}
 
-                      {/* Floating Emojis Animation particles container */}
-                      <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl z-50">
+                      {/* Floating Emojis Animation particles container (premium instagram-styled) */}
+                      <div className="absolute inset-x-0 bottom-0 pointer-events-none overflow-hidden h-64 rounded-b-2xl z-50 flex items-end justify-center">
                         <AnimatePresence>
                           {(floatingEmojisByChat[chat.id] || []).map((particle) => (
                             <motion.div
                               key={particle.id}
-                              initial={{ opacity: 1, y: 50, scale: 0.8 }}
+                              initial={{ opacity: 0, y: 20, x: 0, scale: 0.3 }}
                               animate={{ 
-                                opacity: 0, 
-                                y: -150, 
-                                x: particle.x, 
-                                scale: [1, 1.6, 0.5] 
+                                opacity: [0, 1, 1, 0], 
+                                y: -120 - Math.random() * 60, 
+                                x: particle.x,
+                                scale: [0.3, 1.4, 1.1, 0.7],
+                                rotate: (Math.random() - 0.5) * 60 
                               }}
-                              exit={{ opacity: 0 }}
-                              transition={{ 
-                                duration: 2.0, 
-                                delay: particle.delay,
-                                ease: "easeOut"
-                              }}
-                              className="absolute bottom-4 left-1/2 text-2xl select-none"
+                              transition={{ duration: 1.8, ease: 'easeOut', delay: particle.delay }}
+                              className="absolute pointer-events-none text-2xl select-none"
+                              style={{ bottom: '16px' }}
                             >
                               {particle.emoji}
                             </motion.div>
@@ -1552,87 +1623,53 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
                       </div>
 
                       {/* Micro interaction buttons row */}
-                      <div className="mt-3.5 border-t border-zinc-900/60 pt-2.5 flex items-center gap-4 text-zinc-500 select-none relative z-10">
-                        
-                        {/* Like icon */}
-                        <button
-                          onClick={() => {
-                            handleLikeChat(chat.id);
-                            if (!likedChats.includes(chat.id)) {
-                              spawnFloatingEmojis(chat.id, '💚');
-                            }
-                          }}
-                          className={`flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer ${
-                            hasUserLiked ? 'text-emerald-400' : 'hover:text-zinc-300'
-                          }`}
-                        >
-                          <Heart className={`w-3.5 h-3.5 ${hasUserLiked ? 'fill-emerald-400 text-emerald-400' : ''}`} />
-                          <span>{chat.likesCount || 0}</span>
-                        </button>
-
-                        {/* Reaction Menu Button */}
-                        <div className="relative">
+                      <div className="mt-3.5 border-t border-zinc-900/60 pt-2.5 flex items-center justify-between text-zinc-500 select-none relative z-10 gap-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Like icon - red styled with no cheap floating animation */}
                           <button
-                            onClick={() => setReactionMenuChatId(reactionMenuChatId === chat.id ? null : chat.id)}
-                            className="flex items-center gap-1 text-[10px] font-mono font-bold hover:text-zinc-300 transition-colors cursor-pointer"
+                            onClick={() => {
+                              handleLikeChat(chat.id);
+                            }}
+                            className={`flex items-center gap-1.5 text-[10px] font-mono font-bold transition-colors cursor-pointer ${
+                              hasUserLiked ? 'text-rose-500 hover:text-rose-400' : 'hover:text-zinc-300'
+                            }`}
                           >
-                            <span>{chatReaction ? REACTIONS.find(r => r.key === chatReaction)?.emoji : '😊'}</span>
-                            <span className="text-[9px] uppercase tracking-wider font-mono">React</span>
+                            <Heart className={`w-3.5 h-3.5 ${hasUserLiked ? 'fill-rose-500 text-rose-500' : ''}`} />
+                            <span>{chat.likesCount || 0}</span>
                           </button>
 
-                          {/* Float Reaction Menu Popup */}
-                          <AnimatePresence>
-                            {reactionMenuChatId === chat.id && (
-                              <>
-                                <div className="fixed inset-0 z-40" onClick={() => setReactionMenuChatId(null)} />
-                                <motion.div
-                                  initial={{ opacity: 0, scale: 0.9, y: 5 }}
-                                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                                  exit={{ opacity: 0, scale: 0.9, y: 5 }}
-                                  className="absolute bottom-6 left-0 z-50 bg-zinc-900 border border-zinc-800 p-1.5 rounded-full flex gap-1 shadow-2xl"
+                          {/* Full 6-Emoji inline reaction bar with embedded counts (no separate generated section) */}
+                          <div className="flex items-center gap-1">
+                            {REACTIONS.map((r) => {
+                              const count = chat.reactions?.[r.key] || 0;
+                              const isActive = chatReaction === r.key;
+                              return (
+                                <button
+                                  key={r.key}
+                                  onClick={() => {
+                                    handleReactChat(chat.id, r.key);
+                                    spawnFloatingEmojis(chat.id, r.emoji);
+                                  }}
+                                  className={`text-[11px] px-2 py-1 rounded-full border flex items-center gap-1 transition-all cursor-pointer select-none active:scale-90 ${
+                                    isActive
+                                      ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400 font-bold'
+                                      : 'bg-zinc-900/50 border-zinc-900 text-zinc-400 hover:border-zinc-800'
+                                  }`}
+                                  title={`React with ${r.key}`}
                                 >
-                                  {REACTIONS.map((r) => (
-                                    <button
-                                      key={r.key}
-                                      onClick={() => {
-                                        handleReactChat(chat.id, r.key);
-                                        spawnFloatingEmojis(chat.id, r.emoji);
-                                        setReactionMenuChatId(null);
-                                      }}
-                                      className="hover:scale-125 transition-transform p-1 text-base cursor-pointer"
-                                      title={r.key}
-                                    >
-                                      {r.emoji}
-                                    </button>
-                                  ))}
-                                </motion.div>
-                              </>
-                            )}
-                          </AnimatePresence>
+                                  <span>{r.emoji}</span>
+                                  {count > 0 && (
+                                    <span className={`text-[10px] font-mono font-bold ${isActive ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                                      {count}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
 
-                        {/* Display Active Reactions counts under message card */}
-                        <div className="flex items-center gap-1 flex-wrap">
-                          {REACTIONS.map((r) => {
-                            const count = chat.reactions?.[r.key] || 0;
-                            if (count <= 0) return null;
-                            return (
-                              <button 
-                                key={r.key} 
-                                onClick={() => {
-                                  handleReactChat(chat.id, r.key);
-                                  spawnFloatingEmojis(chat.id, r.emoji);
-                                }}
-                                className="text-[10px] bg-zinc-900/60 border border-zinc-850 px-1 py-0.5 rounded flex items-center gap-0.5 hover:bg-zinc-800 transition-colors"
-                              >
-                                <span>{r.emoji}</span>
-                                <span className="text-zinc-500 font-bold">{count}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {/* Comments button */}
+                        {/* Comments button moved fully right */}
                         <button
                           onClick={() => {
                             const nextVal = expandedCommentsChatId === chat.id ? null : chat.id;
@@ -1643,30 +1680,12 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
                               }, 300);
                             }
                           }}
-                          className={`flex items-center gap-1 text-[10px] font-mono font-bold transition-colors ml-auto cursor-pointer ${
+                          className={`flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer shrink-0 ${
                             expandedCommentsChatId === chat.id ? 'text-emerald-400 font-bold' : 'hover:text-zinc-300 text-zinc-500'
                           }`}
                         >
                           <MessageSquare className="w-3.5 h-3.5" />
                           <span>{chat.commentsCount || 0}</span>
-                        </button>
-
-                        {/* Share button */}
-                        <button
-                          onClick={() => handleShareChat(chat.id)}
-                          className="p-1 text-zinc-500 hover:text-emerald-400 transition-colors cursor-pointer"
-                          title="Share Chat Cryptographic Link"
-                        >
-                          <Share2 className="w-3.5 h-3.5" />
-                        </button>
-
-                        {/* Report button */}
-                        <button
-                          onClick={() => handleReportChat(chat.id, chat.content || '[Attached Graphic]')}
-                          className="p-1 text-zinc-500 hover:text-rose-400 transition-colors cursor-pointer"
-                          title="Report Chat Message Violation"
-                        >
-                          <Flag className="w-3.5 h-3.5" />
                         </button>
                       </div>
 
@@ -1695,195 +1714,204 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
             </div>
 
             {/* Bottom active entry messaging panel (WhatsApp styled) */}
-            <form onSubmit={handleSendChatSubmit} className="p-3 border-t border-zinc-900 bg-zinc-950 flex flex-col shrink-0 gap-2 relative">
-              {chatError && (
-                <div className="absolute top-0 left-0 right-0 -translate-y-full bg-rose-950/25 border-t border-rose-500/20 text-rose-400 text-[10px] py-1.5 px-4 z-20 flex justify-between items-center leading-relaxed">
-                  <span>[WARNING]: {chatError}</span>
-                  <button type="button" onClick={() => setChatError('')} className="p-0.5 text-zinc-500 hover:text-rose-400 cursor-pointer"><X className="w-3 h-3" /></button>
-                </div>
-              )}
-
-              {/* Chat Format Selection Bar */}
-              <div className="flex items-center gap-1 border-b border-zinc-900/60 pb-2">
-                <span className="text-[9px] font-mono text-zinc-500 uppercase font-bold tracking-wider mr-2">FORMAT:</span>
-                {(['text', 'image', 'poll', 'qa'] as const).map((fmt) => (
-                  <button
-                    key={fmt}
-                    type="button"
-                    onClick={() => { setChatType(fmt); setChatError(''); }}
-                    className={`px-2.5 py-1 text-[9px] font-mono font-bold uppercase rounded border transition-all cursor-pointer ${
-                      chatType === fmt
-                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                        : 'bg-zinc-900/40 border-zinc-900 text-zinc-500 hover:text-zinc-300'
-                    }`}
-                  >
-                    {fmt}
-                  </button>
-                ))}
+            {(!activeCommunity.allowUserPost && activeCommunity.createdByImei !== deviceSig.value) ? (
+              <div className="p-4 border-t border-zinc-900 bg-zinc-950/80 flex items-center justify-center gap-2.5 shrink-0 select-none text-center">
+                <Lock className="w-4 h-4 text-rose-500 animate-pulse" />
+                <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wider">
+                  RESTRICTED COHORT: Only the creator is authorized to post messages inside this community.
+                </span>
               </div>
-
-              {/* Collapsible Format Settings Panels */}
-              {chatType === 'image' && (
-                <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-900 space-y-2">
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-950 border border-zinc-850 rounded text-xs font-mono font-bold text-zinc-400 hover:text-emerald-400 transition-colors flex items-center gap-2 cursor-pointer"
-                    >
-                      <ImageIcon className="w-4 h-4 text-emerald-500" />
-                      <span>ATTACH DEVICE GRAPHIC</span>
-                    </button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleImageFileChange(e, 'chat')}
-                      className="hidden"
-                    />
-
-                    {chatImagePreview && (
-                      <div className="relative">
-                        <img src={chatImagePreview} alt="Preview" className="w-12 h-12 rounded object-cover border border-zinc-800" />
-                        <button
-                          type="button"
-                          onClick={() => { setChatImagePreview(''); setChatImageUrl(''); }}
-                          className="absolute -top-1.5 -right-1.5 bg-rose-500 hover:bg-rose-600 rounded-full p-0.5 text-zinc-950 cursor-pointer"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    )}
+            ) : (
+              <form onSubmit={handleSendChatSubmit} className="p-3 border-t border-zinc-900 bg-zinc-950 flex flex-col shrink-0 gap-2 relative">
+                {chatError && (
+                  <div className="absolute top-0 left-0 right-0 -translate-y-full bg-rose-950/25 border-t border-rose-500/20 text-rose-400 text-[10px] py-1.5 px-4 z-20 flex justify-between items-center leading-relaxed">
+                    <span>[WARNING]: {chatError}</span>
+                    <button type="button" onClick={() => setChatError('')} className="p-0.5 text-zinc-500 hover:text-rose-400 cursor-pointer"><X className="w-3 h-3" /></button>
                   </div>
-                </div>
-              )}
+                )}
 
-              {chatType === 'poll' && (
-                <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-900 space-y-3">
-                  <span className="text-[9px] font-mono font-bold text-zinc-500 block uppercase">POLL CONFIGURATION</span>
-                  {pollOptions.map((opt, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-zinc-600 w-4">{i + 1}</span>
-                      <input
-                        type="text"
-                        placeholder={`Option ${i + 1} desc...`}
-                        value={opt}
-                        onChange={(e) => {
-                          const updated = [...pollOptions];
-                          updated[i] = e.target.value;
-                          setPollOptions(updated);
-                        }}
-                        className="flex-1 bg-zinc-900 border border-zinc-850 rounded px-2.5 py-1.5 text-xs text-zinc-300 focus:outline-none placeholder-zinc-700"
-                      />
-                      {pollOptions.length > 2 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const updated = [...pollOptions];
-                            updated.splice(i, 1);
-                            setPollOptions(updated);
-                          }}
-                          className="p-1.5 text-rose-400 hover:bg-rose-950/15 rounded cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  {pollOptions.length < 5 && (
+                {/* Chat Format Selection Bar */}
+                <div className="flex items-center gap-1 border-b border-zinc-900/60 pb-2">
+                  <span className="text-[9px] font-mono text-zinc-500 uppercase font-bold tracking-wider mr-2">FORMAT:</span>
+                  {(['text', 'image', 'poll', 'qa'] as const).map((fmt) => (
                     <button
+                      key={fmt}
                       type="button"
-                      onClick={() => setPollOptions([...pollOptions, ''])}
-                      className="text-[10px] font-mono font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
+                      onClick={() => { setChatType(fmt); setChatError(''); }}
+                      className={`px-2.5 py-1 text-[9px] font-mono font-bold uppercase rounded border transition-all cursor-pointer ${
+                        chatType === fmt
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                          : 'bg-zinc-900/40 border-zinc-900 text-zinc-500 hover:text-zinc-300'
+                      }`}
                     >
-                      <Plus className="w-3 h-3" />
-                      <span>ADD CHOICE</span>
+                      {fmt}
                     </button>
-                  )}
+                  ))}
                 </div>
-              )}
 
-              {chatType === 'qa' && (
-                <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-900 space-y-3">
-                  <span className="text-[9px] font-mono font-bold text-zinc-500 block uppercase">Q&A QUESTION CONFIG (SELECT THE CORRECT ANSWER ROW)</span>
-                  {pollOptions.map((opt, i) => (
-                    <div key={i} className="flex items-center gap-2">
+                {/* Collapsible Format Settings Panels */}
+                {chatType === 'image' && (
+                  <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-900 space-y-2">
+                    <div className="flex items-center gap-3">
                       <button
                         type="button"
-                        onClick={() => setQaCorrectIndex(i)}
-                        className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 cursor-pointer ${
-                          qaCorrectIndex === i
-                            ? 'bg-emerald-500 border-emerald-500 text-zinc-950'
-                            : 'border-zinc-800 bg-zinc-900 text-transparent'
-                        }`}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-950 border border-zinc-850 rounded text-xs font-mono font-bold text-zinc-400 hover:text-emerald-400 transition-colors flex items-center gap-2 cursor-pointer"
                       >
-                        <Check className="w-3 h-3 stroke-[3px]" />
+                        <ImageIcon className="w-4 h-4 text-emerald-500" />
+                        <span>ATTACH DEVICE GRAPHIC</span>
                       </button>
                       <input
-                        type="text"
-                        placeholder={`QA Option ${i + 1} desc...`}
-                        value={opt}
-                        onChange={(e) => {
-                          const updated = [...pollOptions];
-                          updated[i] = e.target.value;
-                          setPollOptions(updated);
-                        }}
-                        className="flex-1 bg-zinc-900 border border-zinc-850 rounded px-2.5 py-1.5 text-xs text-zinc-300 focus:outline-none placeholder-zinc-700"
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleImageFileChange(e, 'chat')}
+                        className="hidden"
                       />
-                      {pollOptions.length > 2 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const updated = [...pollOptions];
-                            updated.splice(i, 1);
-                            setPollOptions(updated);
-                            if (qaCorrectIndex === i) setQaCorrectIndex(null);
-                          }}
-                          className="p-1.5 text-rose-400 hover:bg-rose-950/15 rounded cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+
+                      {chatImagePreview && (
+                        <div className="relative">
+                          <img src={chatImagePreview} alt="Preview" className="w-12 h-12 rounded object-cover border border-zinc-800" />
+                          <button
+                            type="button"
+                            onClick={() => { setChatImagePreview(''); setChatImageUrl(''); }}
+                            className="absolute -top-1.5 -right-1.5 bg-rose-500 hover:bg-rose-600 rounded-full p-0.5 text-zinc-950 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
                       )}
                     </div>
-                  ))}
-                  {pollOptions.length < 4 && (
-                    <button
-                      type="button"
-                      onClick={() => setPollOptions([...pollOptions, ''])}
-                      className="text-[10px] font-mono font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>ADD ANSWER CHOICE</span>
-                    </button>
-                  )}
+                  </div>
+                )}
+
+                {chatType === 'poll' && (
+                  <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-900 space-y-3">
+                    <span className="text-[9px] font-mono font-bold text-zinc-500 block uppercase">POLL CONFIGURATION</span>
+                    {pollOptions.map((opt, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono text-zinc-600 w-4">{i + 1}</span>
+                        <input
+                          type="text"
+                          placeholder={`Option ${i + 1} desc...`}
+                          value={opt}
+                          onChange={(e) => {
+                            const updated = [...pollOptions];
+                            updated[i] = e.target.value;
+                            setPollOptions(updated);
+                          }}
+                          className="flex-1 bg-zinc-900 border border-zinc-850 rounded px-2.5 py-1.5 text-xs text-zinc-300 focus:outline-none placeholder-zinc-700"
+                        />
+                        {pollOptions.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = [...pollOptions];
+                              updated.splice(i, 1);
+                              setPollOptions(updated);
+                            }}
+                            className="p-1.5 text-rose-400 hover:bg-rose-950/15 rounded cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {pollOptions.length < 5 && (
+                      <button
+                        type="button"
+                        onClick={() => setPollOptions([...pollOptions, ''])}
+                        className="text-[10px] font-mono font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>ADD CHOICE</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {chatType === 'qa' && (
+                  <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-900 space-y-3">
+                    <span className="text-[9px] font-mono font-bold text-zinc-500 block uppercase">Q&A QUESTION CONFIG (SELECT THE CORRECT ANSWER ROW)</span>
+                    {pollOptions.map((opt, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setQaCorrectIndex(i)}
+                          className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 cursor-pointer ${
+                            qaCorrectIndex === i
+                              ? 'bg-emerald-500 border-emerald-500 text-zinc-950'
+                              : 'border-zinc-800 bg-zinc-900 text-transparent'
+                          }`}
+                        >
+                          <Check className="w-3 h-3 stroke-[3px]" />
+                        </button>
+                        <input
+                          type="text"
+                          placeholder={`QA Option ${i + 1} desc...`}
+                          value={opt}
+                          onChange={(e) => {
+                            const updated = [...pollOptions];
+                            updated[i] = e.target.value;
+                            setPollOptions(updated);
+                          }}
+                          className="flex-1 bg-zinc-900 border border-zinc-850 rounded px-2.5 py-1.5 text-xs text-zinc-300 focus:outline-none placeholder-zinc-700"
+                        />
+                        {pollOptions.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = [...pollOptions];
+                              updated.splice(i, 1);
+                              setPollOptions(updated);
+                              if (qaCorrectIndex === i) setQaCorrectIndex(null);
+                            }}
+                            className="p-1.5 text-rose-400 hover:bg-rose-950/15 rounded cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {pollOptions.length < 4 && (
+                      <button
+                        type="button"
+                        onClick={() => setPollOptions([...pollOptions, ''])}
+                        className="text-[10px] font-mono font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>ADD ANSWER CHOICE</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Message Input Box Row */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder={
+                      chatType === 'poll'
+                        ? 'Ask a polling question...'
+                        : chatType === 'qa'
+                          ? 'Ask a Q&A question...'
+                          : 'Encrypt private message...'
+                    }
+                    value={chatContent}
+                    onChange={(e) => setChatContent(e.target.value)}
+                    className="flex-1 bg-zinc-900 border border-zinc-850 focus:border-emerald-500/40 rounded-xl px-4 py-2.5 text-xs text-zinc-300 placeholder-zinc-700 focus:outline-none transition-colors"
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={sendingChat}
+                    className="p-2.5 bg-emerald-500 text-zinc-950 hover:bg-emerald-400 active:scale-95 disabled:opacity-50 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-lg shadow-emerald-950/20"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
                 </div>
-              )}
-
-              {/* Message Input Box Row */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder={
-                    chatType === 'poll'
-                      ? 'Ask a polling question...'
-                      : chatType === 'qa'
-                        ? 'Ask a Q&A question...'
-                        : 'Encrypt private message...'
-                  }
-                  value={chatContent}
-                  onChange={(e) => setChatContent(e.target.value)}
-                  className="flex-1 bg-zinc-900 border border-zinc-850 focus:border-emerald-500/40 rounded-xl px-4 py-2.5 text-xs text-zinc-300 placeholder-zinc-700 focus:outline-none transition-colors"
-                />
-
-                <button
-                  type="submit"
-                  disabled={sendingChat}
-                  className="p-2.5 bg-emerald-500 text-zinc-950 hover:bg-emerald-400 active:scale-95 disabled:opacity-50 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-lg shadow-emerald-950/20"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </div>
-            </form>
+              </form>
+            )}
           </>
           );
         })() : (

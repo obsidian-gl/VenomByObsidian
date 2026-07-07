@@ -90,6 +90,7 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
   const [editChatContent, setEditChatContent] = useState('');
   const [editChatLikes, setEditChatLikes] = useState<number>(0);
   const [editChatComments, setEditChatComments] = useState<number>(0);
+  const [editChatReports, setEditChatReports] = useState<number>(0);
   const [editChatImageUrl, setEditChatImageUrl] = useState('');
   const [editChatIp, setEditChatIp] = useState('');
   const [editChatImei, setEditChatImei] = useState('');
@@ -367,6 +368,7 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
         content: editChatContent.trim(),
         likesCount: Number(editChatLikes),
         commentsCount: Number(editChatComments),
+        reportsCount: Number(editChatReports),
         imageUrl: editChatImageUrl.trim(),
         createdByIp: editChatIp.trim(),
         createdByImei: editChatImei.trim(),
@@ -1101,7 +1103,7 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
                                     />
                                   </div>
 
-                                  <div className="grid grid-cols-3 gap-2">
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                     <div>
                                       <label className="block text-[8px] font-mono uppercase text-zinc-600 mb-1">Likes Count</label>
                                       <input
@@ -1117,6 +1119,15 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
                                         type="number"
                                         value={editChatComments}
                                         onChange={(e) => setEditChatComments(Math.max(0, Number(e.target.value)))}
+                                        className="w-full bg-black border border-zinc-900 rounded p-1.5 text-center text-zinc-200 focus:outline-none"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[8px] font-mono uppercase text-zinc-600 mb-1">Reports Count</label>
+                                      <input
+                                        type="number"
+                                        value={editChatReports}
+                                        onChange={(e) => setEditChatReports(Math.max(0, Number(e.target.value)))}
                                         className="w-full bg-black border border-zinc-900 rounded p-1.5 text-center text-zinc-200 focus:outline-none"
                                       />
                                     </div>
@@ -1238,6 +1249,7 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
                                       <span>Type: {chat.type?.toUpperCase()}</span>
                                       <span>Likes: {chat.likesCount || 0}</span>
                                       <span>Comments: {chat.commentsCount || 0}</span>
+                                      <span className={(chat.reportsCount || 0) > 0 ? "text-amber-500 font-bold" : ""}>Reports: {chat.reportsCount || 0}</span>
                                     </div>
                                   </div>
 
@@ -1248,6 +1260,7 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
                                         setEditChatContent(chat.content || '');
                                         setEditChatLikes(chat.likesCount || 0);
                                         setEditChatComments(chat.commentsCount || 0);
+                                        setEditChatReports(chat.reportsCount || 0);
                                         setEditChatImageUrl(chat.imageUrl || '');
                                         setEditChatIp(chat.createdByIp || '');
                                         setEditChatImei(chat.createdByImei || '');
