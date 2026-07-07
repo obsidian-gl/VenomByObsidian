@@ -13,7 +13,9 @@ import {
   doc, 
   deleteDoc, 
   getDocs,
-  writeBatch
+  writeBatch,
+  updateDoc,
+  where
 } from 'firebase/firestore';
 import { 
   Trash2, 
@@ -30,7 +32,13 @@ import {
   Activity,
   Cpu,
   RefreshCw,
-  ExternalLink
+  ExternalLink,
+  Edit,
+  Save,
+  Plus,
+  Minus,
+  Settings,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -54,6 +62,40 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
   const [loadingChats, setLoadingChats] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Community parameter editing states
+  const [isEditingComm, setIsEditingComm] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editImageUrl, setEditImageUrl] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editArea, setEditArea] = useState('');
+  const [editAllowUserPost, setEditAllowUserPost] = useState(true);
+  const [editTotalReviews, setEditTotalReviews] = useState<number>(0);
+  const [blockType, setBlockType] = useState<'none' | 'temporary' | 'permanent'>('none');
+  const [blockDays, setBlockDays] = useState<number>(1);
+  const [editUserLimit, setEditUserLimit] = useState('');
+  const [editCreatedByIp, setEditCreatedByIp] = useState('');
+  const [editCreatedByImei, setEditCreatedByImei] = useState('');
+  const [editCreatedBySerial, setEditCreatedBySerial] = useState('');
+  const [editCreatedByDeviceType, setEditCreatedByDeviceType] = useState('DESKTOP');
+  const [editReportsCount, setEditReportsCount] = useState<number>(0);
+
+  // Reports states for selected community
+  const [commReports, setCommReports] = useState<any[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+
+  // Chat parameter editing states
+  const [editingChatId, setEditingChatId] = useState<string | null>(null);
+  const [editChatContent, setEditChatContent] = useState('');
+  const [editChatLikes, setEditChatLikes] = useState<number>(0);
+  const [editChatComments, setEditChatComments] = useState<number>(0);
+  const [editChatImageUrl, setEditChatImageUrl] = useState('');
+  const [editChatIp, setEditChatIp] = useState('');
+  const [editChatImei, setEditChatImei] = useState('');
+  const [editChatSerial, setEditChatSerial] = useState('');
+  const [editChatDeviceType, setEditChatDeviceType] = useState('DESKTOP');
+  const [editChatMsgType, setEditChatMsgType] = useState('text');
 
   // Check existing session auth
   useEffect(() => {
@@ -105,6 +147,67 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
     }, (error) => {
       console.error('Error fetching chats for admin:', error);
       setLoadingChats(false);
+    });
+
+    return () => unsubscribe();
+  }, [selectedComm]);
+
+  // Synchronize editing state whenever selection changes
+  useEffect(() => {
+    if (selectedComm) {
+      setEditName(selectedComm.name || '');
+      setEditDesc(selectedComm.description || '');
+      setEditImageUrl(selectedComm.imageUrl || '');
+      setEditPassword(selectedComm.password || '');
+      setEditArea(selectedComm.religion || '');
+      setEditAllowUserPost(selectedComm.allowUserPost !== false);
+      setEditTotalReviews(selectedComm.viewsCount || 0);
+      setEditUserLimit(selectedComm.userLimit ? selectedComm.userLimit.toString() : '');
+      setEditCreatedByIp(selectedComm.createdByIp || '');
+      setEditCreatedByImei(selectedComm.createdByImei || '');
+      setEditCreatedBySerial(selectedComm.createdBySerial || '');
+      setEditCreatedByDeviceType(selectedComm.createdByDeviceType || 'DESKTOP');
+      setEditReportsCount(selectedComm.reportsCount || 0);
+      
+      if (selectedComm.isBlocked) {
+        if (selectedComm.blockedUntil) {
+          setBlockType('temporary');
+          const until = typeof selectedComm.blockedUntil.toMillis === 'function' ? selectedComm.blockedUntil.toMillis() : Number(selectedComm.blockedUntil);
+          const diffMs = until - Date.now();
+          const diffDays = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+          setBlockDays(diffDays);
+        } else {
+          setBlockType('permanent');
+        }
+      } else {
+        setBlockType('none');
+      }
+      setIsEditingComm(false);
+      setEditingChatId(null);
+    }
+  }, [selectedComm]);
+
+  // Listen/Fetch reports for selected community
+  useEffect(() => {
+    if (!db || !selectedComm) {
+      setCommReports([]);
+      return;
+    }
+
+    setLoadingReports(true);
+    const reportsRef = collection(db, 'reports');
+    const q = query(reportsRef, where('communityId', '==', selectedComm.id));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      }));
+      setCommReports(list);
+      setLoadingReports(false);
+    }, (error) => {
+      console.error('Error fetching reports for selected community:', error);
+      setLoadingReports(false);
     });
 
     return () => unsubscribe();
@@ -201,6 +304,81 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
     } catch (err: any) {
       console.error('Delete failed:', err);
       alert(`Delete failed: ${err.message || err}`);
+    }
+  };
+
+  // Save modified community data
+  const handleSaveCommunity = async () => {
+    if (!selectedComm) return;
+    try {
+      const commRef = doc(db, 'communities', selectedComm.id);
+      
+      const updateData: any = {
+        name: editName.trim(),
+        description: editDesc.trim(),
+        imageUrl: editImageUrl.trim(),
+        password: editPassword.trim(),
+        religion: editArea.trim(),
+        allowUserPost: editAllowUserPost,
+        viewsCount: Number(editTotalReviews),
+        userLimit: editUserLimit ? parseInt(editUserLimit) : null,
+        createdByIp: editCreatedByIp.trim(),
+        createdByImei: editCreatedByImei.trim(),
+        createdBySerial: editCreatedBySerial.trim(),
+        createdByDeviceType: editCreatedByDeviceType,
+        reportsCount: Number(editReportsCount)
+      };
+
+      if (blockType === 'permanent') {
+        updateData.isBlocked = true;
+        updateData.blockedUntil = null;
+      } else if (blockType === 'temporary') {
+        updateData.isBlocked = true;
+        const futureDate = new Date();
+        futureDate.setDate(futureDate.getDate() + Number(blockDays));
+        updateData.blockedUntil = futureDate;
+      } else {
+        updateData.isBlocked = false;
+        updateData.blockedUntil = null;
+      }
+
+      await updateDoc(commRef, updateData);
+      
+      // Update local selection
+      setSelectedComm({
+        ...selectedComm,
+        ...updateData
+      });
+
+      setIsEditingComm(false);
+      alert('Community parameters saved successfully!');
+    } catch (err: any) {
+      console.error('Failed to update community:', err);
+      alert('Update failed: ' + err.message);
+    }
+  };
+
+  // Save modified chat message data
+  const handleSaveChat = async (chatId: string) => {
+    if (!selectedComm) return;
+    try {
+      const chatRef = doc(db, 'communities', selectedComm.id, 'chats', chatId);
+      await updateDoc(chatRef, {
+        content: editChatContent.trim(),
+        likesCount: Number(editChatLikes),
+        commentsCount: Number(editChatComments),
+        imageUrl: editChatImageUrl.trim(),
+        createdByIp: editChatIp.trim(),
+        createdByImei: editChatImei.trim(),
+        createdBySerial: editChatSerial.trim(),
+        createdByDeviceType: editChatDeviceType,
+        type: editChatMsgType
+      });
+      setEditingChatId(null);
+      alert('Chat payload updated successfully!');
+    } catch (err: any) {
+      console.error('Failed to update chat:', err);
+      alert('Update failed: ' + err.message);
     }
   };
 
@@ -446,8 +624,293 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
                     <div className="p-4 border-b border-zinc-900 bg-zinc-950 shrink-0">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">SECTOR TELEMETRY INSPECTOR</span>
-                        <span className="text-[9px] font-mono text-zinc-500 uppercase">ID: {selectedComm.id}</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setIsEditingComm(!isEditingComm)}
+                            className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider bg-zinc-900 border border-zinc-800 hover:border-emerald-500/20 px-2.5 py-1 rounded cursor-pointer transition-colors text-zinc-400 hover:text-emerald-400"
+                          >
+                            {isEditingComm ? (
+                              <>
+                                <X className="w-3 h-3" />
+                                <span>Cancel</span>
+                              </>
+                            ) : (
+                              <>
+                                <Edit className="w-3 h-3" />
+                                <span>Edit Parameters</span>
+                              </>
+                            )}
+                          </button>
+                          <span className="text-[9px] font-mono text-zinc-500 uppercase">ID: {selectedComm.id}</span>
+                        </div>
                       </div>
+
+                      {isEditingComm ? (
+                        /* COMMUNITY PARAMETERS FORM */
+                        <div className="mt-4 p-4 bg-black/40 border border-zinc-900 rounded-lg space-y-4 text-xs">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1">Community Name</label>
+                              <input
+                                type="text"
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                className="w-full bg-zinc-950 border border-zinc-900 rounded px-2.5 py-1.5 text-zinc-300 focus:outline-none focus:border-emerald-500/30 font-sans"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1">Area / Religion / Region</label>
+                              <input
+                                type="text"
+                                value={editArea}
+                                onChange={(e) => setEditArea(e.target.value)}
+                                className="w-full bg-zinc-950 border border-zinc-900 rounded px-2.5 py-1.5 text-zinc-300 focus:outline-none focus:border-emerald-500/30 font-sans"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1">Description</label>
+                            <textarea
+                              value={editDesc}
+                              onChange={(e) => setEditDesc(e.target.value)}
+                              rows={2}
+                              className="w-full bg-zinc-950 border border-zinc-900 rounded px-2.5 py-1.5 text-zinc-300 focus:outline-none focus:border-emerald-500/30 font-sans"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1">Logo image url</label>
+                              <input
+                                type="text"
+                                value={editImageUrl}
+                                onChange={(e) => setEditImageUrl(e.target.value)}
+                                className="w-full bg-zinc-950 border border-zinc-900 rounded px-2.5 py-1.5 text-zinc-300 focus:outline-none focus:border-emerald-500/30 text-[10px]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1">Access password (empty = public)</label>
+                              <input
+                                type="text"
+                                value={editPassword}
+                                onChange={(e) => setEditPassword(e.target.value)}
+                                className="w-full bg-zinc-950 border border-zinc-900 rounded px-2.5 py-1.5 text-zinc-300 focus:outline-none focus:border-emerald-500/30 text-[10px]"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 pt-1">
+                            <div>
+                              <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1">Member Posting Policy</label>
+                              <button
+                                onClick={() => setEditAllowUserPost(!editAllowUserPost)}
+                                className={`w-full text-center py-1.5 rounded border text-[9px] uppercase font-bold tracking-wider transition-all ${
+                                  editAllowUserPost
+                                    ? 'bg-emerald-950/15 border-emerald-500/20 text-emerald-400'
+                                    : 'bg-zinc-950 border-zinc-900 text-zinc-500'
+                                }`}
+                              >
+                                {editAllowUserPost ? 'MEMBERS CAN POST' : 'OWNER ONLY POSTS'}
+                              </button>
+                            </div>
+                            <div>
+                              <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1">Total Reviews</label>
+                              <div className="flex items-center bg-zinc-950 border border-zinc-900 rounded overflow-hidden">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditTotalReviews(prev => Math.max(0, prev - 1))}
+                                  className="px-3 py-1.5 bg-zinc-900 text-zinc-400 hover:text-rose-400 border-r border-zinc-900 active:bg-zinc-850 cursor-pointer"
+                                >
+                                  <Minus className="w-3.5 h-3.5" />
+                                </button>
+                                <input
+                                  type="number"
+                                  value={editTotalReviews}
+                                  onChange={(e) => setEditTotalReviews(Math.max(0, Number(e.target.value)))}
+                                  className="w-full text-center bg-transparent focus:outline-none font-bold text-zinc-300 text-xs"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setEditTotalReviews(prev => prev + 1)}
+                                  className="px-3 py-1.5 bg-zinc-900 text-zinc-400 hover:text-emerald-400 border-l border-zinc-900 active:bg-zinc-850 cursor-pointer"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* ADVANCED METADATA ROW */}
+                          <div className="pt-2 border-t border-zinc-900/60">
+                            <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1.5">Advanced Community Metadata</label>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                              <div>
+                                <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1">User Limit (0 = unlimited)</label>
+                                <input
+                                  type="number"
+                                  placeholder="Unlimited"
+                                  value={editUserLimit}
+                                  onChange={(e) => setEditUserLimit(e.target.value)}
+                                  className="w-full bg-zinc-950 border border-zinc-900 rounded px-2.5 py-1.5 text-zinc-300 focus:outline-none focus:border-emerald-500/30 text-[10px]"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1">Reports Count</label>
+                                <input
+                                  type="number"
+                                  value={editReportsCount}
+                                  onChange={(e) => setEditReportsCount(Math.max(0, Number(e.target.value)))}
+                                  className="w-full bg-zinc-950 border border-zinc-900 rounded px-2.5 py-1.5 text-zinc-300 focus:outline-none focus:border-emerald-500/30 text-[10px]"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1">Creator Device Type</label>
+                                <select
+                                  value={editCreatedByDeviceType}
+                                  onChange={(e) => setEditCreatedByDeviceType(e.target.value)}
+                                  className="w-full bg-zinc-950 border border-zinc-900 rounded px-2.5 py-1.5 text-zinc-300 focus:outline-none focus:border-emerald-500/30 text-[10px]"
+                                >
+                                  <option value="DESKTOP">DESKTOP / LAPTOP</option>
+                                  <option value="MOBILE">MOBILE DEVICE</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1">Creator IP Address</label>
+                                <input
+                                  type="text"
+                                  value={editCreatedByIp}
+                                  onChange={(e) => setEditCreatedByIp(e.target.value)}
+                                  className="w-full bg-zinc-950 border border-zinc-900 rounded px-2.5 py-1.5 text-zinc-300 focus:outline-none focus:border-emerald-500/30 text-[10px]"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1">Creator IMEI</label>
+                                <input
+                                  type="text"
+                                  value={editCreatedByImei}
+                                  onChange={(e) => setEditCreatedByImei(e.target.value)}
+                                  className="w-full bg-zinc-950 border border-zinc-900 rounded px-2.5 py-1.5 text-zinc-300 focus:outline-none focus:border-emerald-500/30 text-[10px]"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1">Creator Serial Number</label>
+                                <input
+                                  type="text"
+                                  value={editCreatedBySerial}
+                                  onChange={(e) => setEditCreatedBySerial(e.target.value)}
+                                  className="w-full bg-zinc-950 border border-zinc-900 rounded px-2.5 py-1.5 text-zinc-300 focus:outline-none focus:border-emerald-500/30 text-[10px]"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* BLOCKING MANAGER */}
+                          <div className="pt-2 border-t border-zinc-900/60">
+                            <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1.5">Sector Enforcement Status</label>
+                            <div className="grid grid-cols-3 gap-2">
+                              <button
+                                onClick={() => setBlockType('none')}
+                                className={`py-1.5 rounded border text-[8px] font-bold uppercase tracking-wider transition-all ${
+                                  blockType === 'none'
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                    : 'bg-zinc-950 border-zinc-900 text-zinc-500 hover:border-zinc-850'
+                                }`}
+                              >
+                                Active (No Block)
+                              </button>
+                              <button
+                                onClick={() => setBlockType('temporary')}
+                                className={`py-1.5 rounded border text-[8px] font-bold uppercase tracking-wider transition-all ${
+                                  blockType === 'temporary'
+                                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                                    : 'bg-zinc-950 border-zinc-900 text-zinc-500 hover:border-zinc-850'
+                                }`}
+                              >
+                                Temp Block
+                              </button>
+                              <button
+                                onClick={() => setBlockType('permanent')}
+                                className={`py-1.5 rounded border text-[8px] font-bold uppercase tracking-wider transition-all ${
+                                  blockType === 'permanent'
+                                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                                    : 'bg-zinc-950 border-zinc-900 text-zinc-500 hover:border-zinc-850'
+                                }`}
+                              >
+                                Permanent Block
+                              </button>
+                            </div>
+
+                            {blockType === 'temporary' && (
+                              <div className="mt-2.5 p-2 bg-amber-950/5 border border-amber-500/10 rounded flex items-center justify-between gap-3 animate-fadeIn">
+                                <span className="text-[8px] uppercase text-amber-500 font-bold font-mono">Temporary ban duration:</span>
+                                <div className="flex items-center bg-zinc-950 border border-zinc-900 rounded overflow-hidden h-7">
+                                  <button
+                                    onClick={() => setBlockDays(prev => Math.max(1, prev - 1))}
+                                    className="px-2 py-0.5 bg-zinc-900 text-zinc-400 hover:text-amber-400 border-r border-zinc-900 h-full cursor-pointer"
+                                  >
+                                    <Minus className="w-3 h-3" />
+                                  </button>
+                                  <span className="px-3 text-xs font-bold font-mono text-zinc-300 min-w-[50px] text-center">{blockDays} days</span>
+                                  <button
+                                    onClick={() => setBlockDays(prev => prev + 1)}
+                                    className="px-2 py-0.5 bg-zinc-900 text-zinc-400 hover:text-amber-400 border-l border-zinc-900 h-full cursor-pointer"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex gap-2 pt-2">
+                            <button
+                              onClick={handleSaveCommunity}
+                              className="flex-1 py-2 bg-emerald-500 text-zinc-950 text-[10px] font-bold tracking-widest uppercase rounded cursor-pointer hover:bg-emerald-400 transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
+                            >
+                              <Save className="w-3.5 h-3.5" />
+                              <span>Commit Settings</span>
+                            </button>
+                            <button
+                              onClick={() => setIsEditingComm(false)}
+                              className="px-4 py-2 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 text-[10px] uppercase font-bold rounded cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        /* VISUAL METADATA BANNER */
+                        <div className="mt-3 flex items-start gap-3 p-3 bg-zinc-900/10 border border-zinc-900/40 rounded-lg">
+                          <img
+                            src={selectedComm.imageUrl}
+                            alt={selectedComm.name}
+                            className="w-12 h-12 rounded-lg object-cover border border-zinc-850 shrink-0"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <h2 className="text-xs font-bold text-zinc-200 tracking-wide font-sans">{selectedComm.name}</h2>
+                            <p className="text-[10px] text-zinc-500 mt-1 font-sans leading-relaxed line-clamp-2">{selectedComm.description || 'No description provided.'}</p>
+                            
+                            <div className="flex flex-wrap gap-2 items-center mt-2">
+                              <span className="text-[8px] bg-emerald-500/5 text-emerald-400 border border-emerald-500/10 px-2 py-0.5 rounded uppercase font-bold tracking-wider font-mono">
+                                Area: {selectedComm.religion || 'General'}
+                              </span>
+                              <span className="text-[8px] bg-zinc-950 text-zinc-500 px-2 py-0.5 rounded font-bold uppercase font-mono">
+                                Reviews: {selectedComm.viewsCount || 0}
+                              </span>
+                              {selectedComm.isBlocked && (
+                                <span className="text-[8px] bg-rose-500/10 text-rose-400 border border-rose-500/20 px-2 py-0.5 rounded font-bold uppercase font-mono flex items-center gap-0.5">
+                                  <ShieldAlert className="w-2.5 h-2.5" />
+                                  <span>
+                                    {selectedComm.blockedUntil ? `TEMP BLOCK (${blockDays} DAYS LEFT)` : 'PERM BLOCKED'}
+                                  </span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Info grid */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 p-3 bg-[#050505] border border-zinc-900 rounded-lg">
@@ -456,22 +919,25 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
                           <span className="text-[10px] font-bold text-zinc-400">{selectedComm.createdByIp || 'N/A'}</span>
                         </div>
                         <div>
-                          <span className="text-[8px] text-zinc-600 block uppercase">CREATOR IMEI / SN</span>
+                          <span className="text-[8px] text-zinc-600 block uppercase">CREATOR DEVICE DETECTED</span>
                           <span className="text-[10px] font-bold text-zinc-400 truncate block max-w-xs">
-                            {selectedComm.createdByImei || 'N/A'} 
-                            {selectedComm.createdByImei && ` | ` + (() => {
-                              const creatorImei = selectedComm.createdByImei;
-                              let hash = 0;
-                              for (let i = 0; i < creatorImei.length; i++) {
-                                hash = creatorImei.charCodeAt(i) + ((hash << 5) - hash);
-                              }
-                              const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-                              let creatorSerial = 'VSN';
-                              for (let i = 0; i < 10; i++) {
-                                creatorSerial += chars.charAt(Math.abs((hash + i * 23) % chars.length));
-                              }
-                              return creatorSerial;
-                            })()}
+                            {selectedComm.createdByDeviceType === 'MOBILE' ? (
+                              `IMEI: ${selectedComm.createdByImei || 'N/A'}`
+                            ) : (
+                              `S/N: ${selectedComm.createdBySerial || (() => {
+                                const creatorImei = selectedComm.createdByImei || '359182371283718';
+                                let hash = 0;
+                                for (let i = 0; i < creatorImei.length; i++) {
+                                  hash = creatorImei.charCodeAt(i) + ((hash << 5) - hash);
+                                }
+                                const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                                let creatorSerial = 'VSN';
+                                for (let i = 0; i < 10; i++) {
+                                  creatorSerial += chars.charAt(Math.abs((hash + i * 23) % chars.length));
+                                }
+                                return creatorSerial;
+                              })()}`
+                            )}
                           </span>
                         </div>
                         <div>
@@ -483,6 +949,39 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
                           <span className="text-[10px] font-bold text-zinc-400">{selectedComm.allowUserPost ? 'MEMBERS CAN POST' : 'OWNER ONLY'}</span>
                         </div>
                       </div>
+
+                      {/* Incident Reports Panel */}
+                      {commReports.length > 0 && (
+                        <div className="mt-3 p-3 bg-rose-950/10 border border-rose-950/20 rounded-lg space-y-2 text-xs">
+                          <div className="flex justify-between items-center pb-1 border-b border-rose-950/20">
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1">
+                              <ShieldAlert className="w-3.5 h-3.5" />
+                              <span>ACTIVE COHORT INCIDENT REPORTS ({commReports.length})</span>
+                            </span>
+                          </div>
+                          <div className="space-y-2 max-h-40 overflow-y-auto pr-1 font-mono">
+                            {commReports.map((rep) => (
+                              <div key={rep.id} className="p-2.5 bg-black/40 border border-rose-950/20 rounded text-[10px] space-y-1">
+                                <div className="flex justify-between items-center text-[8px] text-zinc-500">
+                                  <span>ID: {rep.id} | TYPE: {rep.chatId ? 'MESSAGE VIOLATION' : 'COMMUNITY VIOLATION'}</span>
+                                  <span>{rep.createdAt ? new Date(rep.createdAt).toLocaleString() : 'N/A'}</span>
+                                </div>
+                                <p className="text-zinc-300 font-bold"><span className="text-rose-400">REASON:</span> {rep.reason}</p>
+                                {rep.opinion && <p className="text-zinc-400 font-sans"><span className="text-zinc-600 font-mono">OPINION:</span> {rep.opinion}</p>}
+                                {rep.chatContent && (
+                                  <p className="text-zinc-500 italic bg-zinc-950/60 p-1.5 rounded mt-1 font-sans">
+                                    " {rep.chatContent} "
+                                  </p>
+                                )}
+                                <div className="flex justify-between text-[8px] text-zinc-600 pt-1 border-t border-zinc-900/60 font-mono">
+                                  <span>FILER IP: {rep.ip || 'N/A'}</span>
+                                  <span>FILER IMEI/SIG: {rep.imei || 'N/A'}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Chats scroll lists */}
@@ -495,57 +994,215 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
                         <div className="text-center py-12 text-zinc-600 text-[10px] uppercase">COHORT DISPATCH SHELL IS EMPTY</div>
                       ) : (
                         activeChats.map((chat) => {
-                          const dispatcherImei = chat.createdByImei || '359182371283718';
-                          let dispHash = 0;
-                          for (let i = 0; i < dispatcherImei.length; i++) {
-                            dispHash = dispatcherImei.charCodeAt(i) + ((dispHash << 5) - dispHash);
-                          }
-                          const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-                          let dispatcherSerial = 'VSN';
-                          for (let i = 0; i < 10; i++) {
-                            dispatcherSerial += chars.charAt(Math.abs((dispHash + i * 23) % chars.length));
-                          }
+                          const isMobile = chat.createdByDeviceType === 'MOBILE' || (!chat.createdByDeviceType && chat.createdByImei && !chat.createdBySerial);
+                          const dispatcherImei = chat.createdByImei || 'N/A';
+                          const dispatcherSerial = chat.createdBySerial || (() => {
+                            const imeiVal = chat.createdByImei || '359182371283718';
+                            let dispHash = 0;
+                            for (let i = 0; i < imeiVal.length; i++) {
+                              dispHash = imeiVal.charCodeAt(i) + ((dispHash << 5) - dispHash);
+                            }
+                            const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                            let serial = 'VSN';
+                            for (let i = 0; i < 10; i++) {
+                              serial += chars.charAt(Math.abs((dispHash + i * 23) % chars.length));
+                            }
+                            return serial;
+                          })();
+
+                          const isEditingThisChat = editingChatId === chat.id;
 
                           return (
                             <div
                               key={chat.id}
                               className="p-3 bg-zinc-950 border border-zinc-900 hover:border-zinc-850 rounded-lg transition-all flex items-start gap-4 relative"
                             >
-                              <div className="min-w-0 flex-1 space-y-1.5">
-                                <div className="flex justify-between items-center text-[8px] font-mono text-zinc-600">
-                                  <span>DISPATCHER IP: {chat.createdByIp || 'N/A'}</span>
-                                  <span>IMEI: {chat.createdByImei || 'N/A'} | S/N: {dispatcherSerial}</span>
+                              {isEditingThisChat ? (
+                                <div className="min-w-0 flex-1 space-y-3 font-sans text-xs">
+                                  <span className="text-[8px] font-bold font-mono text-emerald-400 uppercase tracking-widest block">EDIT DISPATCH MESSAGE</span>
+                                  
+                                  <div>
+                                    <label className="block text-[8px] font-mono uppercase text-zinc-600 mb-1">Message Content</label>
+                                    <textarea
+                                      value={editChatContent}
+                                      onChange={(e) => setEditChatContent(e.target.value)}
+                                      rows={3}
+                                      className="w-full bg-black border border-zinc-900 rounded p-2 text-zinc-200 focus:outline-none focus:border-emerald-500/30 font-sans"
+                                    />
+                                  </div>
+
+                                  <div className="grid grid-cols-3 gap-2">
+                                    <div>
+                                      <label className="block text-[8px] font-mono uppercase text-zinc-600 mb-1">Likes Count</label>
+                                      <input
+                                        type="number"
+                                        value={editChatLikes}
+                                        onChange={(e) => setEditChatLikes(Math.max(0, Number(e.target.value)))}
+                                        className="w-full bg-black border border-zinc-900 rounded p-1.5 text-center text-zinc-200 focus:outline-none"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[8px] font-mono uppercase text-zinc-600 mb-1">Comments</label>
+                                      <input
+                                        type="number"
+                                        value={editChatComments}
+                                        onChange={(e) => setEditChatComments(Math.max(0, Number(e.target.value)))}
+                                        className="w-full bg-black border border-zinc-900 rounded p-1.5 text-center text-zinc-200 focus:outline-none"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[8px] font-mono uppercase text-zinc-600 mb-1">Image URL</label>
+                                      <input
+                                        type="text"
+                                        value={editChatImageUrl}
+                                        onChange={(e) => setEditChatImageUrl(e.target.value)}
+                                        className="w-full bg-black border border-zinc-900 rounded p-1.5 text-zinc-200 focus:outline-none truncate text-[10px]"
+                                        placeholder="No image attached"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                    <div>
+                                      <label className="block text-[8px] font-mono uppercase text-zinc-600 mb-1">Sender IP Address</label>
+                                      <input
+                                        type="text"
+                                        value={editChatIp}
+                                        onChange={(e) => setEditChatIp(e.target.value)}
+                                        className="w-full bg-black border border-zinc-900 rounded p-1.5 text-zinc-200 focus:outline-none text-[10px]"
+                                        placeholder="Sender IP"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[8px] font-mono uppercase text-zinc-600 mb-1">Sender IMEI</label>
+                                      <input
+                                        type="text"
+                                        value={editChatImei}
+                                        onChange={(e) => setEditChatImei(e.target.value)}
+                                        className="w-full bg-black border border-zinc-900 rounded p-1.5 text-zinc-200 focus:outline-none text-[10px]"
+                                        placeholder="Sender IMEI"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[8px] font-mono uppercase text-zinc-600 mb-1">Sender Serial Number</label>
+                                      <input
+                                        type="text"
+                                        value={editChatSerial}
+                                        onChange={(e) => setEditChatSerial(e.target.value)}
+                                        className="w-full bg-black border border-zinc-900 rounded p-1.5 text-zinc-200 focus:outline-none text-[10px]"
+                                        placeholder="Sender Serial"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[8px] font-mono uppercase text-zinc-600 mb-1">Device Type</label>
+                                      <select
+                                        value={editChatDeviceType}
+                                        onChange={(e) => setEditChatDeviceType(e.target.value)}
+                                        className="w-full bg-black border border-zinc-900 rounded p-1.5 text-zinc-200 focus:outline-none text-[10px]"
+                                      >
+                                        <option value="DESKTOP">DESKTOP</option>
+                                        <option value="MOBILE">MOBILE</option>
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-[8px] font-mono uppercase text-zinc-600 mb-1">Message Type</label>
+                                      <select
+                                        value={editChatMsgType}
+                                        onChange={(e) => setEditChatMsgType(e.target.value)}
+                                        className="w-full bg-black border border-zinc-900 rounded p-1.5 text-zinc-200 focus:outline-none text-[10px]"
+                                      >
+                                        <option value="text">TEXT</option>
+                                        <option value="image">IMAGE</option>
+                                        <option value="poll">POLL</option>
+                                        <option value="qa">Q&A</option>
+                                      </select>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => handleSaveChat(chat.id)}
+                                      className="flex-1 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black tracking-widest text-[9px] uppercase rounded cursor-pointer transition-all"
+                                    >
+                                      Save Dispatch
+                                    </button>
+                                    <button
+                                      onClick={() => setEditingChatId(null)}
+                                      className="px-3 py-1.5 bg-zinc-900 border border-zinc-850 text-zinc-400 text-[9px] uppercase font-bold rounded cursor-pointer"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
                                 </div>
+                              ) : (
+                                <>
+                                  <div className="min-w-0 flex-1 space-y-1.5">
+                                    <div className="flex justify-between items-center text-[8px] font-mono text-zinc-600">
+                                      <span className="flex items-center gap-1">
+                                        ROLE: 
+                                        {chat.createdByImei === selectedComm.createdByImei ? (
+                                          <span className="text-emerald-400 font-bold bg-emerald-950/20 px-1 py-0.5 rounded border border-emerald-500/20 text-[7px]">OWNER</span>
+                                        ) : (
+                                          <span className="text-zinc-400 font-bold bg-zinc-900 px-1 py-0.5 rounded border border-zinc-800 text-[7px]">MEMBER</span>
+                                        )}
+                                      </span>
+                                      <span>
+                                        SENDER DEVICE: {chat.createdByDeviceType || 'DESKTOP'}
+                                      </span>
+                                    </div>
 
-                              <p className="text-[11px] text-zinc-300 whitespace-pre-wrap font-sans">
-                                {chat.content}
-                              </p>
+                                    <p className="text-[11px] text-zinc-300 whitespace-pre-wrap font-sans">
+                                      {chat.content}
+                                    </p>
 
-                              {chat.imageUrl && (
-                                <img
-                                  src={chat.imageUrl}
-                                  alt="Payload graphic"
-                                  className="w-24 h-24 rounded object-cover border border-zinc-900 bg-zinc-900 mt-2"
-                                  referrerPolicy="no-referrer"
-                                />
+                                    {chat.imageUrl && (
+                                      <img
+                                        src={chat.imageUrl}
+                                        alt="Payload graphic"
+                                        className="w-24 h-24 rounded object-cover border border-zinc-900 bg-zinc-900 mt-2"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                    )}
+
+                                    <div className="flex gap-3 text-[9px] text-zinc-600 font-mono">
+                                      <span>Type: {chat.type?.toUpperCase()}</span>
+                                      <span>Likes: {chat.likesCount || 0}</span>
+                                      <span>Comments: {chat.commentsCount || 0}</span>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-col gap-1 shrink-0">
+                                    <button
+                                      onClick={() => {
+                                        setEditingChatId(chat.id);
+                                        setEditChatContent(chat.content || '');
+                                        setEditChatLikes(chat.likesCount || 0);
+                                        setEditChatComments(chat.commentsCount || 0);
+                                        setEditChatImageUrl(chat.imageUrl || '');
+                                        setEditChatIp(chat.createdByIp || '');
+                                        setEditChatImei(chat.createdByImei || '');
+                                        setEditChatSerial(chat.createdBySerial || '');
+                                        setEditChatDeviceType(chat.createdByDeviceType || 'DESKTOP');
+                                        setEditChatMsgType(chat.type || 'text');
+                                      }}
+                                      className="p-1.5 text-zinc-700 hover:text-emerald-400 rounded hover:bg-emerald-950/15 cursor-pointer transition-colors"
+                                      title="EDIT CHAT MESSAGE DETAILS"
+                                    >
+                                      <Edit className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteChat(chat.id)}
+                                      className="p-1.5 text-zinc-700 hover:text-rose-400 rounded hover:bg-rose-950/15 cursor-pointer shrink-0 transition-colors"
+                                      title="PURGE DISPATCH MESSAGE"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </>
                               )}
-
-                              <div className="flex gap-3 text-[9px] text-zinc-600 font-mono">
-                                <span>Type: {chat.type?.toUpperCase()}</span>
-                                <span>Likes: {chat.likesCount || 0}</span>
-                                <span>Comments: {chat.commentsCount || 0}</span>
-                              </div>
                             </div>
-
-                            <button
-                              onClick={() => handleDeleteChat(chat.id)}
-                              className="p-1.5 text-zinc-700 hover:text-rose-400 rounded hover:bg-rose-950/15 cursor-pointer shrink-0 transition-colors"
-                              title="PURGE DISPATCH MESSAGE"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        )})
+                          );
+                        })
                       )}
                     </div>
                   </>

@@ -47,10 +47,15 @@ import {
   AlertTriangle,
   Eye,
   BookOpen,
-  Clock
+  Clock,
+  Twitter,
+  Facebook,
+  MessageCircle,
+  Copy,
+  ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getClientIp, getDeviceIdentifier, isMobileDevice } from '../utils/ip';
+import { getClientIp, getDeviceIdentifier, isMobileDevice, getDeviceSerial } from '../utils/ip';
 import { generatePostHash } from '../utils/crypto';
 import { compressImageToBase64 } from '../utils/image';
 import { checkIpBlockStatus } from '../utils/blockChecker';
@@ -76,6 +81,13 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
   // Device details
   const [deviceIp, setDeviceIp] = useState('');
   const [deviceSig, setDeviceSig] = useState({ type: 'SERIAL', value: '' });
+
+  // Custom designed in-app Share Modal states
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareModalTitle, setShareModalTitle] = useState('');
+  const [shareModalUrl, setShareModalUrl] = useState('');
+  const [shareModalPreview, setShareModalPreview] = useState('');
+  const [isCopiedLink, setIsCopiedLink] = useState(false);
 
   // Pinned communities local storage state (maximum 5)
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
@@ -125,6 +137,19 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
   const [showPasswordGate, setShowPasswordGate] = useState<any | null>(null);
   const [gatePasswordInput, setGatePasswordInput] = useState('');
   const [gateError, setGateError] = useState('');
+
+  // Report Modal states
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportTargetId, setReportTargetId] = useState('');
+  const [reportTargetType, setReportTargetType] = useState<'community' | 'chat'>('community');
+  const [reportTargetName, setReportTargetName] = useState('');
+  const [reportChatId, setReportChatId] = useState('');
+  const [reportChatContent, setReportChatContent] = useState('');
+  const [reportReason, setReportReason] = useState('Illicit content');
+  const [reportOpinion, setReportOpinion] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportError, setReportError] = useState('');
+  const [reportSuccess, setReportSuccess] = useState('');
 
   // Active Chat Message Creation States
   const [chatType, setChatType] = useState<'text' | 'image' | 'poll' | 'qa'>('text');
@@ -337,7 +362,8 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
 
     if (sharedCommunityId) {
       const targetComm = communities.find(c => c.id === sharedCommunityId);
-      if (targetComm && !targetComm.isBlocked) {
+      const isBlocked = targetComm?.isBlocked && (!targetComm.blockedUntil || (typeof targetComm.blockedUntil.toMillis === 'function' ? targetComm.blockedUntil.toMillis() : Number(targetComm.blockedUntil)) > Date.now());
+      if (targetComm && !isBlocked) {
         setInitialDeepLinkProcessed(true);
 
         // If password is set on shared community, open password gate
@@ -451,6 +477,8 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
         password: cPassword.trim() || '',
         createdByIp: deviceIp,
         createdByImei: deviceSig.value,
+        createdBySerial: getDeviceSerial(),
+        createdByDeviceType: isMobileDevice() ? 'MOBILE' : 'DESKTOP',
         createdAt: serverTimestamp(),
         reportsCount: 0,
         isBlocked: false,
@@ -564,6 +592,11 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
     setGateError('');
     if (gatePasswordInput === showPasswordGate.password) {
       const targetComm = showPasswordGate;
+      if (rememberPassword) {
+        localStorage.setItem(`unlocked_comm_${targetComm.id}`, 'true');
+      } else {
+        localStorage.removeItem(`unlocked_comm_${targetComm.id}`);
+      }
       setShowPasswordGate(null);
       setGatePasswordInput('');
       handleEnterCommunityDirect(targetComm);
@@ -630,6 +663,8 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
         createdAt: serverTimestamp(),
         createdByIp: deviceIp,
         createdByImei: deviceSig.value,
+        createdBySerial: getDeviceSerial(),
+        createdByDeviceType: isMobileDevice() ? 'MOBILE' : 'DESKTOP',
         encryptedHash: hash,
         likesCount: 0,
         reactions: { love: 0, fire: 0, laugh: 0, wow: 0, like: 0, angry: 0 },
@@ -711,6 +746,10 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
           reactionUpdate[`reactions.${previousReaction}`] = increment(-1);
         }
         reactionUpdate[`reactions.${reactionKey}`] = increment(1);
+
+        // Spawn particles
+        const emoji = REACTIONS.find(r => r.key === reactionKey)?.emoji || '❤️';
+        spawnFloatingEmojis(chatId, emoji);
       }
 
       await updateDoc(chatDocRef, reactionUpdate);
@@ -739,7 +778,9 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
         content: newCommentContent.trim(),
         createdAt: serverTimestamp(),
         createdByIp: deviceIp,
-        createdByImei: deviceSig.value
+        createdByImei: deviceSig.value,
+        createdBySerial: getDeviceSerial(),
+        createdByDeviceType: isMobileDevice() ? 'MOBILE' : 'DESKTOP'
       };
 
       await setDoc(customCommentRef, payload);
@@ -756,22 +797,68 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
     }
   };
 
-  // Submit report on a community (100 auto block threshold)
-  const handleReportCommunity = async (commId?: string, commName?: string) => {
+  // Trigger report community modal
+  const handleReportCommunity = (commId?: string, commName?: string) => {
     const targetId = commId || activeCommunity?.id;
     const targetName = commName || activeCommunity?.name;
     if (!targetId || !targetName) return;
 
-    const confirmReport = window.confirm(`Are you absolutely sure you want to flag and report the community "${targetName}" for policy violation?`);
-    if (!confirmReport) return;
+    setReportTargetId(targetId);
+    setReportTargetType('community');
+    setReportTargetName(targetName);
+    setReportChatId('');
+    setReportChatContent('');
+    setReportReason('Illicit content');
+    setReportOpinion('');
+    setReportError('');
+    setReportSuccess('');
+    setShowReportModal(true);
+  };
+
+  // Trigger report chat message modal
+  const handleReportChat = (chatId: string, contentSummary: string) => {
+    if (!activeCommunity) return;
+
+    setReportTargetId(activeCommunity.id);
+    setReportTargetType('chat');
+    setReportTargetName(activeCommunity.name);
+    setReportChatId(chatId);
+    setReportChatContent(contentSummary);
+    setReportReason('Illicit message content');
+    setReportOpinion('');
+    setReportError('');
+    setReportSuccess('');
+    setShowReportModal(true);
+  };
+
+  // Handle Submit from report modal
+  const handleReportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportOpinion.trim()) {
+      setReportError('Please provide your opinion or details of the violation.');
+      return;
+    }
+
+    setReportSubmitting(true);
+    setReportError('');
 
     try {
-      const commDocRef = doc(db, 'communities', targetId);
+      const isChat = reportTargetType === 'chat';
+      const targetId = reportTargetId;
 
-      // Increment reportsCount
-      const currentComm = commId ? communities.find(c => c.id === commId) : activeCommunity;
+      if (isChat) {
+        // Increment reportsCount on the chat doc
+        const chatDocRef = doc(db, 'communities', targetId, 'chats', reportChatId);
+        await updateDoc(chatDocRef, {
+          reportsCount: increment(1)
+        });
+      }
+
+      // Also increment reportsCount on parent community
+      const commDocRef = doc(db, 'communities', targetId);
+      const currentComm = communities.find(c => c.id === targetId);
       const newReportCount = ((currentComm?.reportsCount || 0) + 1);
-      
+
       const updatePayload: any = {
         reportsCount: increment(1)
       };
@@ -782,62 +869,44 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
 
       await updateDoc(commDocRef, updatePayload);
 
-      // Log the report in reports collection
+      // Log report in firestore reports collection
       const reportRef = doc(collection(db, 'reports'));
-      await setDoc(reportRef, {
+      const reportPayload: any = {
         id: reportRef.id,
         communityId: targetId,
-        communityName: targetName,
-        reason: 'Community Violations (Flagged by Users)',
-        opinion: 'Filer reporting illicit activities.',
+        communityName: reportTargetName,
+        reason: reportReason,
+        opinion: reportOpinion.trim(),
         createdAt: new Date().toISOString(),
         ip: deviceIp,
         imei: deviceSig.value
-      });
+      };
 
-      alert(`Report submitted successfully for "${targetName}". Thank you for securing Obsidian.`);
+      if (isChat) {
+        reportPayload.chatId = reportChatId;
+        reportPayload.chatContent = reportChatContent;
+      }
+
+      await setDoc(reportRef, reportPayload);
+
+      setReportSuccess('Report submitted successfully. Thank you for keeping the grid secure.');
 
       if (newReportCount >= 100) {
-        alert('THRESHOLD EXCEEDED: This community has been automatically quarantined and blocked.');
         if (activeCommunity?.id === targetId) {
           setActiveCommunity(null);
         }
       }
-    } catch (err) {
+
+      setTimeout(() => {
+        setShowReportModal(false);
+        setReportSuccess('');
+      }, 2000);
+
+    } catch (err: any) {
       console.error('Report submission failed:', err);
-    }
-  };
-
-  // Submit report on a community chat message
-  const handleReportChat = async (chatId: string, contentSummary: string) => {
-    if (!activeCommunity) return;
-
-    const confirmReport = window.confirm('Are you absolutely sure you want to flag and report this message for policy violation?');
-    if (!confirmReport) return;
-
-    try {
-      const chatDocRef = doc(db, 'communities', activeCommunity.id, 'chats', chatId);
-      await updateDoc(chatDocRef, {
-        reportsCount: increment(1)
-      });
-
-      const reportRef = doc(collection(db, 'reports'));
-      await setDoc(reportRef, {
-        id: reportRef.id,
-        communityId: activeCommunity.id,
-        communityName: activeCommunity.name,
-        chatId: chatId,
-        chatContent: contentSummary,
-        reason: 'Community Message Violations (Flagged by Users)',
-        opinion: 'Filer reporting illicit chat content.',
-        createdAt: new Date().toISOString(),
-        ip: deviceIp,
-        imei: deviceSig.value
-      });
-
-      alert('Report submitted successfully. Thank you for keeping the grid secure.');
-    } catch (err) {
-      console.error('Chat report failed:', err);
+      setReportError('Failed to submit report. Please try again.');
+    } finally {
+      setReportSubmitting(false);
     }
   };
 
@@ -845,12 +914,14 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
   const handleShareChat = (chatId: string) => {
     if (!activeCommunity) return;
     const shareLink = `${window.location.origin}/communities?communityId=${activeCommunity.id}&chatId=${chatId}`;
+    const chatObj = chats.find(c => c.id === chatId);
+    const contentText = chatObj?.content || 'Attached payload/graphic';
     
-    navigator.clipboard.writeText(shareLink).then(() => {
-      alert('COPILOT SYNC: Shared chat cryptographic deep link has been copied to your clipboard!');
-    }).catch(() => {
-      alert(`Link: ${shareLink}`);
-    });
+    setShareModalTitle('Share Chat Message');
+    setShareModalUrl(shareLink);
+    setShareModalPreview(contentText);
+    setIsCopiedLink(false);
+    setShowShareModal(true);
   };
 
   // Share community itself deep-link
@@ -858,11 +929,67 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
     if (!activeCommunity) return;
     const shareLink = `${window.location.origin}/communities?communityId=${activeCommunity.id}`;
     
-    navigator.clipboard.writeText(shareLink).then(() => {
-      alert('COPILOT SYNC: Shared community deep link has been copied to your clipboard!');
-    }).catch(() => {
-      alert(`Link: ${shareLink}`);
+    setShareModalTitle(`Share Community: ${activeCommunity.name}`);
+    setShareModalUrl(shareLink);
+    setShareModalPreview(activeCommunity.description || 'Secure Cognitive Cohort on Venom Grid');
+    setIsCopiedLink(false);
+    setShowShareModal(true);
+  };
+
+  const sharePlatforms = [
+    {
+      name: 'WhatsApp',
+      icon: MessageCircle,
+      color: 'hover:text-green-400 hover:border-green-500/30 text-emerald-500/70 hover:bg-green-950/15',
+      url: `https://api.whatsapp.com/send?text=${encodeURIComponent(`${shareModalTitle}: ${shareModalPreview} \nSecure Link: ${shareModalUrl}`)}`
+    },
+    {
+      name: 'X / Twitter',
+      icon: Twitter,
+      color: 'hover:text-sky-400 hover:border-sky-500/30 text-emerald-500/70 hover:bg-sky-950/15',
+      url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(`${shareModalTitle}: ${shareModalPreview}`)}&url=${encodeURIComponent(shareModalUrl)}`
+    },
+    {
+      name: 'Telegram',
+      icon: Send,
+      color: 'hover:text-blue-400 hover:border-blue-500/30 text-emerald-500/70 hover:bg-blue-950/15',
+      url: `https://t.me/share/url?url=${encodeURIComponent(shareModalUrl)}&text=${encodeURIComponent(`${shareModalTitle}: ${shareModalPreview}`)}`
+    },
+    {
+      name: 'Reddit',
+      icon: ExternalLink,
+      color: 'hover:text-orange-400 hover:border-orange-500/30 text-emerald-500/70 hover:bg-orange-950/15',
+      url: `https://www.reddit.com/submit?url=${encodeURIComponent(shareModalUrl)}&title=${encodeURIComponent(`[VENOM COHORT INTEL] ${shareModalTitle}`)}`
+    },
+    {
+      name: 'Facebook',
+      icon: Facebook,
+      color: 'hover:text-indigo-400 hover:border-indigo-500/30 text-emerald-500/70 hover:bg-indigo-950/15',
+      url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareModalUrl)}`
+    }
+  ];
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(shareModalUrl).then(() => {
+      setIsCopiedLink(true);
+      setTimeout(() => setIsCopiedLink(false), 2000);
     });
+  };
+
+  const handleNativeShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Venom Community — ${shareModalTitle}`,
+          text: `${shareModalTitle}: ${shareModalPreview}`,
+          url: shareModalUrl,
+        });
+      } catch (err) {
+        console.log('Error sharing:', err);
+      }
+    } else {
+      handleCopyLink();
+    }
   };
 
   // Handle Poll Vote
@@ -884,11 +1011,22 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
     }
   };
 
+  const isCommunityBlocked = (c: any) => {
+    if (c.isBlocked) {
+      if (c.blockedUntil) {
+        const until = typeof c.blockedUntil.toMillis === 'function' ? c.blockedUntil.toMillis() : Number(c.blockedUntil);
+        return until > Date.now();
+      }
+      return true;
+    }
+    return false;
+  };
+
   // Render sorting & filtering
   const sortedAndFilteredComms = communities
     .filter(c => {
       // 1. Filter blocked/quarantined communities
-      if (c.isBlocked || (c.reportsCount || 0) >= 100) return false;
+      if (isCommunityBlocked(c) || (c.reportsCount || 0) >= 100) return false;
 
       // 2. Search query by Name, Description, and Religion/Area
       if (searchTerm.trim() !== '') {
@@ -2091,6 +2229,35 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
                   className="w-full bg-zinc-900 border border-zinc-850 focus:border-emerald-500/30 rounded-lg px-3 py-2.5 text-center text-sm text-zinc-300 focus:outline-none tracking-widest"
                 />
 
+                {/* Choice: Enter directly always vs Enter by password always */}
+                <div className="space-y-2 text-left pt-1">
+                  <span className="text-[8px] font-mono font-bold text-zinc-600 block uppercase tracking-wider">ENTRY PERSISTENCE POLICY</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setRememberPassword(true)}
+                      className={`py-2 px-2 rounded-lg border text-[9px] font-mono font-bold uppercase tracking-wide transition-all cursor-pointer ${
+                        rememberPassword
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                          : 'bg-zinc-900/40 border-zinc-900 text-zinc-500 hover:border-zinc-850'
+                      }`}
+                    >
+                      Enter directly always
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRememberPassword(false)}
+                      className={`py-2 px-2 rounded-lg border text-[9px] font-mono font-bold uppercase tracking-wide transition-all cursor-pointer ${
+                        !rememberPassword
+                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                          : 'bg-zinc-900/40 border-zinc-900 text-zinc-500 hover:border-zinc-850'
+                      }`}
+                    >
+                      Enter by password always
+                    </button>
+                  </div>
+                </div>
+
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -2177,6 +2344,261 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
               </div>
             </form>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* PREMIUM SOCIAL SHARING MODAL */}
+      <AnimatePresence>
+        {showShareModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4"
+            onClick={() => setShowShareModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 15, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.95, y: 15, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              className="bg-zinc-950 border border-zinc-850 rounded-xl w-full max-w-sm overflow-hidden shadow-2xl relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="p-4 border-b border-zinc-900 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Share2 className="w-4 h-4 text-emerald-400" />
+                  <span className="font-mono font-bold text-xs tracking-wider uppercase text-zinc-200">
+                    Share Community Intel
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowShareModal(false)}
+                  className="p-1.5 hover:bg-zinc-900 rounded-md text-zinc-500 hover:text-rose-400 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Body Content */}
+              <div className="p-4 space-y-4">
+                {/* Title Preview */}
+                <div className="bg-zinc-900/40 border border-zinc-900 rounded-lg p-3 text-left">
+                  <div className="text-[10px] text-zinc-600 font-mono font-bold tracking-wider uppercase mb-1">
+                    Sharing Payload Preview
+                  </div>
+                  <h4 className="text-xs font-semibold text-zinc-300 font-sans line-clamp-1">
+                    {shareModalTitle}
+                  </h4>
+                  {shareModalPreview && (
+                    <p className="text-[11px] text-zinc-500 font-sans line-clamp-2 mt-1">
+                      {shareModalPreview}
+                    </p>
+                  )}
+                </div>
+
+                {/* Primary Button: Device Native Share (Web Share API) */}
+                {typeof navigator !== 'undefined' && navigator.share && (
+                  <button
+                    onClick={() => {
+                      handleNativeShare();
+                      setShowShareModal(false);
+                    }}
+                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 py-2.5 px-4 rounded-lg font-bold text-xs tracking-wider flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer shadow-lg shadow-emerald-950/20 active:scale-[0.98]"
+                  >
+                    <Share2 className="w-4 h-4 shrink-0" />
+                    SHARE VIA DEVICE APPS
+                  </button>
+                )}
+
+                {/* Grid of Social Platform Shortcuts */}
+                <div className="space-y-2">
+                  <div className="text-[9px] text-zinc-600 font-mono font-bold tracking-wider uppercase text-left">
+                    Social Quick Links
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {sharePlatforms.map((platform) => {
+                      const PlatformIcon = platform.icon;
+                      return (
+                        <a
+                          key={platform.name}
+                          href={platform.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => {
+                            setTimeout(() => setShowShareModal(false), 500);
+                          }}
+                          className={`flex items-center gap-2.5 p-2 rounded-lg border border-zinc-900 bg-zinc-900/10 text-zinc-400 text-xs transition-all duration-200 ${platform.color} cursor-pointer hover:bg-zinc-900/40 font-sans`}
+                        >
+                          <PlatformIcon className="w-4 h-4 shrink-0" />
+                          <span>{platform.name}</span>
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Copy Link input box */}
+                <div className="space-y-1.5 pt-1">
+                  <div className="text-[9px] text-zinc-600 font-mono font-bold tracking-wider uppercase text-left">
+                    Direct Secure Link
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={shareModalUrl}
+                      onClick={(e) => (e.target as HTMLInputElement).select()}
+                      className="bg-zinc-900 border border-zinc-850 rounded-lg px-3 py-1.5 text-[11px] text-zinc-400 select-all font-mono flex-1 focus:outline-none focus:border-zinc-700"
+                    />
+                    <button
+                      onClick={handleCopyLink}
+                      className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 px-3 py-1.5 rounded-lg text-xs font-bold tracking-wider flex items-center gap-1.5 transition-all cursor-pointer relative shrink-0"
+                    >
+                      {isCopiedLink ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                          <span className="text-emerald-400 text-[10px]">COPIED</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-zinc-500" />
+                          <span className="text-[10px]">COPY LINK</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer status */}
+              <div className="px-4 py-3 bg-zinc-900/40 border-t border-zinc-900 text-center text-[9px] text-zinc-500 font-mono">
+                DECENTRALIZED DEEP LINK ENCRYPTED SECURELY
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* SUBMIT CONTENT REPORT MODAL */}
+      <AnimatePresence>
+        {showReportModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4"
+            onClick={() => setShowReportModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 15, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.95, y: 15, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              className="bg-zinc-950 border border-zinc-850 rounded-xl w-full max-w-md overflow-hidden shadow-2xl relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="p-4 border-b border-zinc-900 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Flag className="w-4 h-4 text-rose-500 animate-pulse" />
+                  <span className="font-mono font-bold text-xs tracking-wider uppercase text-rose-400">
+                    SUBMIT CONTENT REPORT
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowReportModal(false)}
+                  className="p-1.5 hover:bg-zinc-900 rounded-md text-zinc-500 hover:text-rose-400 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleReportSubmit}>
+                {/* Body Content */}
+                <div className="p-4 space-y-4 text-xs">
+                  {reportSuccess && (
+                    <div className="bg-emerald-950/20 border border-emerald-500/20 text-emerald-400 text-[10px] p-3 rounded font-sans leading-relaxed">
+                      {reportSuccess}
+                    </div>
+                  )}
+
+                  {reportError && (
+                    <div className="bg-rose-950/20 border border-rose-500/20 text-rose-400 text-[10px] p-3 rounded font-mono leading-relaxed">
+                      {reportError}
+                    </div>
+                  )}
+
+                  {/* Target details */}
+                  <div className="bg-zinc-900/40 border border-zinc-900 rounded-lg p-3 text-left">
+                    <span className="text-[8px] text-zinc-600 font-mono font-bold tracking-wider uppercase block mb-1">
+                      REPORT TARGET REFERENCE
+                    </span>
+                    <p className="text-zinc-300 font-bold font-sans">
+                      {reportTargetType === 'community' ? `Community: ${reportTargetName}` : `Message in: ${reportTargetName}`}
+                    </p>
+                    <span className="text-[9px] text-zinc-500 font-mono block mt-0.5">
+                      TARGET ID: {reportTargetType === 'community' ? reportTargetId : reportChatId}
+                    </span>
+                    {reportTargetType === 'chat' && reportChatContent && (
+                      <p className="text-[10px] text-zinc-500 italic bg-zinc-950/60 p-2 rounded mt-1.5 font-mono line-clamp-2">
+                        " {reportChatContent} "
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Reasons dropdown */}
+                  <div className="space-y-1">
+                    <label className="text-[8px] font-mono uppercase text-zinc-500 block font-bold">REASON FOR COMPLAINT</label>
+                    <select
+                      value={reportReason}
+                      onChange={(e) => setReportReason(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-850 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-rose-500/30"
+                    >
+                      <option value="Illicit content">Illicit/Illegal Content</option>
+                      <option value="Harassment">Harassment or Abuse</option>
+                      <option value="Spam">Spam & Marketing Noise</option>
+                      <option value="Violence">Violence or Hate Speech</option>
+                      <option value="Inappropriate behavior">Inappropriate Cohort Behavior</option>
+                      <option value="Other">Other Policy Violation</option>
+                    </select>
+                  </div>
+
+                  {/* Description textarea */}
+                  <div className="space-y-1">
+                    <label className="text-[8px] font-mono uppercase text-zinc-500 block font-bold">DETAILED FILER OPINION</label>
+                    <textarea
+                      required
+                      rows={3}
+                      value={reportOpinion}
+                      onChange={(e) => setReportOpinion(e.target.value)}
+                      placeholder="Formulate your detailed claim/statement describing the specific violation..."
+                      className="w-full bg-zinc-900 border border-zinc-850 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-rose-500/30 font-sans"
+                    />
+                  </div>
+                </div>
+
+                {/* Footer buttons */}
+                <div className="px-4 py-3 bg-zinc-900/40 border-t border-zinc-900 flex justify-end gap-2 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => setShowReportModal(false)}
+                    className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 font-bold rounded-lg transition-colors uppercase cursor-pointer"
+                  >
+                    CANCEL
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={reportSubmitting}
+                    className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-zinc-100 font-black rounded-lg transition-colors uppercase cursor-pointer tracking-wider flex items-center gap-1 active:scale-[0.98]"
+                  >
+                    {reportSubmitting ? 'SUBMITTING...' : 'SUBMIT REPORT'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 

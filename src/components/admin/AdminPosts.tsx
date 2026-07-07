@@ -197,12 +197,15 @@ export const AdminPosts: React.FC<AdminPostsProps> = ({ posts, onStartEdit, onBl
                       <span className="text-emerald-500 font-bold bg-emerald-950/15 border border-emerald-500/20 px-2 py-0.5 rounded">
                         IP: {post.postedFromIp || '127.0.0.1'}
                       </span>
-                      <span className="text-rose-400 font-bold bg-rose-950/20 border border-rose-500/25 px-2 py-0.5 rounded">
-                        IMEI: {resolvedImei}
-                      </span>
-                      <span className="text-amber-400 font-bold bg-amber-950/20 border border-amber-500/25 px-2 py-0.5 rounded">
-                        S/N: {resolvedSerial}
-                      </span>
+                      {(!post.postedFromDeviceType && post.postedFromImei && !post.postedFromSerial) || post.postedFromDeviceType === 'MOBILE' ? (
+                        <span className="text-rose-400 font-bold bg-rose-950/20 border border-rose-500/25 px-2 py-0.5 rounded">
+                          IMEI: {resolvedImei}
+                        </span>
+                      ) : (
+                        <span className="text-amber-400 font-bold bg-amber-950/20 border border-amber-500/25 px-2 py-0.5 rounded">
+                          S/N: {resolvedSerial}
+                        </span>
+                      )}
                       <span className="text-zinc-400 bg-zinc-950 border border-zinc-900 px-2 py-0.5 rounded truncate max-w-[280px]" title={post.postedFromDevice}>
                         {post.postedFromDevice || 'Unknown Operating System'}
                       </span>

@@ -89,12 +89,8 @@ export function isMobileDevice(): boolean {
 export function getDeviceSerial(): string {
   let serial = localStorage.getItem('venom_device_serial');
   if (!serial) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let result = 'VM';
-    for (let i = 0; i < 10; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    serial = result;
+    // Pre-seed with user's real serial number by default
+    serial = '72669/X6R700058';
     localStorage.setItem('venom_device_serial', serial);
   }
   return serial;
