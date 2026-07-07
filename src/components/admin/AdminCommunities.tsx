@@ -382,6 +382,46 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
     }
   };
 
+  // Dismiss report on Admin Community panel
+  const handleDismissReport = async (reportId: string, chatId?: string) => {
+    if (!selectedComm) return;
+    try {
+      // 1. Delete the report document
+      await deleteDoc(doc(db, 'reports', reportId));
+
+      // 2. Decrement reportsCount on parent community
+      const commRef = doc(db, 'communities', selectedComm.id);
+      const newReportsCount = Math.max(0, (selectedComm.reportsCount || 0) - 1);
+      await updateDoc(commRef, {
+        reportsCount: newReportsCount
+      });
+      setSelectedComm({
+        ...selectedComm,
+        reportsCount: newReportsCount
+      });
+
+      // 3. Decrement reportsCount on the chat if applicable
+      if (chatId) {
+        const chatRef = doc(db, 'communities', selectedComm.id, 'chats', chatId);
+        try {
+          const chatDoc = activeChats.find(c => c.id === chatId);
+          if (chatDoc) {
+            await updateDoc(chatRef, {
+              reportsCount: Math.max(0, (chatDoc.reportsCount || 0) - 1)
+            });
+          }
+        } catch (chatErr) {
+          console.error("Failed to decrement chat reportsCount:", chatErr);
+        }
+      }
+
+      alert('Report successfully dismissed.');
+    } catch (err: any) {
+      console.error('Failed to dismiss report:', err);
+      alert('Failed to dismiss report: ' + err.message);
+    }
+  };
+
   const filteredComms = communities.filter(c => {
     if (searchTerm.trim() !== '') {
       const query = searchTerm.toLowerCase();
@@ -976,6 +1016,36 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
                                 <div className="flex justify-between text-[8px] text-zinc-600 pt-1 border-t border-zinc-900/60 font-mono">
                                   <span>FILER IP: {rep.ip || 'N/A'}</span>
                                   <span>FILER IMEI/SIG: {rep.imei || 'N/A'}</span>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-zinc-900/40">
+                                  <button
+                                    onClick={() => {
+                                      const newReason = window.prompt("Change Report Reason:", rep.reason);
+                                      if (newReason !== null) {
+                                        updateDoc(doc(db, 'reports', rep.id), { reason: newReason.trim() });
+                                      }
+                                    }}
+                                    className="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-[8px] text-zinc-400 hover:text-emerald-400 cursor-pointer font-bold rounded uppercase transition-colors"
+                                  >
+                                    Edit Reason
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const newOpinion = window.prompt("Change Detailed Opinion:", rep.opinion || '');
+                                      if (newOpinion !== null) {
+                                        updateDoc(doc(db, 'reports', rep.id), { opinion: newOpinion.trim() });
+                                      }
+                                    }}
+                                    className="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-[8px] text-zinc-400 hover:text-emerald-400 cursor-pointer font-bold rounded uppercase transition-colors"
+                                  >
+                                    Edit Opinion
+                                  </button>
+                                  <button
+                                    onClick={() => handleDismissReport(rep.id, rep.chatId)}
+                                    className="ml-auto px-2.5 py-0.5 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-500/20 hover:border-rose-400 text-[8px] text-rose-400 hover:text-rose-300 cursor-pointer font-bold rounded uppercase transition-colors"
+                                  >
+                                    Dismiss Report
+                                  </button>
                                 </div>
                               </div>
                             ))}

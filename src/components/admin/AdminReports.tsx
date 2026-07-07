@@ -374,8 +374,8 @@ export default function AdminReports() {
         id: d.id,
         ...d.data()
       })) as any[];
-      // Filter out duplicate check helper documents to show only real reports
-      const realReports = fetched.filter(r => !r.isDuplicateCheck);
+      // Filter out duplicate check helper documents and community-related reports to show only real post reports
+      const realReports = fetched.filter(r => !r.isDuplicateCheck && !r.communityId);
       // Sort client-side in case createdAt field index is building
       realReports.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
       setReports(realReports);
