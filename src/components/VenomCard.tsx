@@ -45,7 +45,7 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { doc, updateDoc, increment, setDoc, deleteDoc, getDoc, runTransaction } from 'firebase/firestore';
 import { getClientIp, getDeviceImei } from '../utils/ip';
 import { copyToClipboard } from '../utils/clipboard';
-import { formatTimeAgo } from '../utils/time';
+import { formatTimeAgo, formatShortCount } from '../utils/time';
 import CommentsPane from './CommentsPane';
 
 interface VenomCardProps {
@@ -942,87 +942,20 @@ Use it now: https://myvenom.vercel.app`;
         )}
       </div>
 
-      {/* Mobile Reaction expanded panel: under the Post section center, above footer actions */}
-      <AnimatePresence>
-        {showMobileReactions && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2, ease: 'easeInOut' }}
-            className="overflow-hidden flex justify-center w-full md:hidden bg-zinc-950/20 border-t border-zinc-900/40"
-          >
-            <div className="py-2.5 px-4 flex justify-center w-full">
-              <div className="bg-zinc-900 border border-zinc-800 rounded-full p-1 px-1.5 flex items-center justify-center gap-1.5 shadow-xl">
-                {REACTIONS.map((r) => {
-                  const count = post.reactions?.[r.key] || 0;
-                  const isUserReacted = activeReaction === r.key;
-                  return (
-                    <button
-                      key={r.key}
-                      onClick={() => handleReact(r.key)}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full transition-all duration-200 text-xs cursor-pointer active:scale-90 ${
-                        isUserReacted
-                          ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold'
-                          : 'bg-zinc-950/30 border border-transparent text-zinc-400 hover:text-zinc-200'
-                      }`}
-                    >
-                      <span className="text-sm shrink-0">{r.emoji}</span>
-                      <span className="font-mono text-[9px] font-medium opacity-80">{count}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Footer Interactive Actions */}
-      <div className="px-3 py-2 border-t border-zinc-900/60 bg-zinc-950 flex items-center justify-between md:grid md:grid-cols-3 text-zinc-500 font-mono">
+      <div className="px-3 py-2 border-t border-zinc-900/60 bg-zinc-950 grid grid-cols-3 items-center text-zinc-500 font-mono gap-1 sm:gap-2">
         
-        {/* Left Side: Vote & Comments Count */}
-        <div className="flex items-center gap-1 sm:gap-2 md:justify-self-start">
-          {/* Reddit Style Vote Section */}
-          <div className="flex items-center gap-0.5 bg-zinc-900/60 border border-zinc-850 rounded px-1.5 py-0.5">
-            <button
-              onClick={() => handleVote('up')}
-              className={`p-1 hover:text-emerald-400 transition-colors rounded cursor-pointer ${
-                userVote === 'up' ? 'text-emerald-400 font-bold bg-emerald-950/25' : ''
-              }`}
-              title="Vote Up"
-            >
-              <ArrowBigUp className={`w-4 h-4 ${userVote === 'up' ? 'fill-emerald-400' : ''}`} />
-            </button>
-            <span className={`text-[10px] font-bold px-1.5 ${
-              userVote === 'up' 
-                ? 'text-emerald-400' 
-                : userVote === 'down' 
-                  ? 'text-rose-400' 
-                  : 'text-zinc-400'
-            }`}>
-              {post.upvotesCount - post.downvotesCount}
-            </span>
-            <button
-              onClick={() => handleVote('down')}
-              className={`p-1 hover:text-rose-400 transition-colors rounded cursor-pointer ${
-                userVote === 'down' ? 'text-rose-400 font-bold bg-rose-950/25' : ''
-              }`}
-              title="Vote Down"
-            >
-              <ArrowBigDown className={`w-4 h-4 ${userVote === 'down' ? 'fill-rose-400' : ''}`} />
-            </button>
-          </div>
-
+        {/* Left Side: Likes & Comments */}
+        <div className="flex items-center gap-1.5 sm:gap-2 justify-start">
           {/* Likes Button */}
           <button
             onClick={handleLikeToggle}
-            className={`flex items-center gap-1.5 px-2.5 py-1 hover:bg-zinc-900/60 rounded text-xs transition-colors cursor-pointer ${
-              liked ? 'text-rose-500 font-semibold' : 'hover:text-rose-400'
+            className={`flex items-center gap-1 sm:gap-1.5 px-2 py-1 hover:bg-zinc-900/60 rounded text-[10px] sm:text-xs transition-colors cursor-pointer ${
+              liked ? 'text-rose-500 font-semibold font-bold' : 'hover:text-rose-400 text-zinc-500'
             }`}
           >
             <Heart className={`w-3.5 h-3.5 ${liked ? 'fill-rose-500 text-rose-500' : ''}`} />
-            <span className="text-[10px]">{post.likesCount}</span>
+            <span className="text-[10px]">{formatShortCount(post.likesCount)}</span>
           </button>
 
           {/* Comments Expand Button */}
@@ -1039,49 +972,18 @@ Use it now: https://myvenom.vercel.app`;
                 }, 150);
               }
             }}
-            className={`flex items-center gap-1.5 px-2.5 py-1 hover:bg-emerald-950/10 rounded text-xs transition-colors cursor-pointer ${
-              showComments ? 'text-emerald-400 font-semibold' : 'hover:text-emerald-400'
+            className={`flex items-center gap-1 sm:gap-1.5 px-2 py-1 hover:bg-emerald-950/10 rounded text-[10px] sm:text-xs transition-colors cursor-pointer ${
+              showComments ? 'text-emerald-400 font-semibold' : 'hover:text-emerald-400 text-zinc-500'
             }`}
           >
             <MessageSquare className="w-3.5 h-3.5" />
-            <span className="text-[10px]">{commentsCount}</span>
-          </button>
-
-          {/* Mobile Reaction Toggle Button (Smiley) */}
-          <button
-            onClick={() => {
-              const nextVal = !showMobileReactions;
-              setShowMobileReactions(nextVal);
-              if (nextVal) {
-                setTimeout(() => {
-                  const element = document.getElementById(`post-${post.id}`);
-                  if (element) {
-                    element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                  }
-                }, 150);
-              }
-            }}
-            className={`flex items-center gap-1.5 px-2.5 py-1 hover:bg-zinc-900/60 rounded text-xs transition-colors cursor-pointer md:hidden ${
-              activeReaction ? 'text-emerald-400 font-semibold' : 'hover:text-emerald-400'
-            }`}
-            title="React to post"
-          >
-            {activeReaction ? (
-              <span className="text-sm shrink-0">
-                {REACTIONS.find((r) => r.key === activeReaction)?.emoji}
-              </span>
-            ) : (
-              <Smile className="w-3.5 h-3.5 text-zinc-500 hover:text-emerald-400" />
-            )}
-            {totalReactions > 0 && (
-              <span className="text-[10px] text-zinc-400 ml-0.5">{totalReactions}</span>
-            )}
+            <span className="text-[10px]">{formatShortCount(commentsCount)}</span>
           </button>
         </div>
 
-        {/* Center Side: Reaction Bar (Tablet / PC: Rounded reaction bar with all 6 emojis in a row) */}
-        <div className="hidden md:flex justify-self-center items-center">
-          <div className="flex items-center gap-1 bg-zinc-900/40 border border-zinc-850/60 rounded-full p-0.5 px-1.5 shadow-inner">
+        {/* Center Side: Reaction Bar (All 6 emojis fitted elegantly without scrolling) */}
+        <div className="flex justify-center items-center">
+          <div className="flex items-center gap-0.5 sm:gap-1 bg-zinc-900/40 border border-zinc-850/60 rounded-full p-0.5 px-1 sm:px-1.5 shadow-inner">
             {REACTIONS.map((r) => {
               const count = post.reactions?.[r.key] || 0;
               const isUserReacted = activeReaction === r.key;
@@ -1089,26 +991,26 @@ Use it now: https://myvenom.vercel.app`;
                 <button
                   key={r.key}
                   onClick={() => handleReact(r.key)}
-                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full transition-all duration-200 text-[11px] cursor-pointer group hover:scale-105 active:scale-95 ${
+                  className={`flex items-center gap-0.5 px-1 sm:px-1.5 py-0.5 rounded-full transition-all duration-200 text-[9px] sm:text-[11px] cursor-pointer group hover:scale-105 active:scale-95 ${
                     isUserReacted
                       ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold'
                       : 'bg-transparent border border-transparent text-zinc-500 hover:text-zinc-300'
                   }`}
                   title={r.label}
                 >
-                  <span className={`text-sm transition-transform duration-200 ${isUserReacted ? 'scale-110' : 'group-hover:scale-120'}`}>
+                  <span className={`text-[11px] sm:text-xs transition-transform duration-200 ${isUserReacted ? 'scale-110' : 'group-hover:scale-120'}`}>
                     {r.emoji}
                   </span>
-                  {count > 0 && <span className="font-mono text-[9px] font-medium">{count}</span>}
+                  {count > 0 && <span className="font-mono text-[8px] sm:text-[9px] font-medium">{formatShortCount(count)}</span>}
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* Right Side: Post Timeline (Wider, adjustable, perfectly spaced, and does not overlap) */}
-        <div className="flex items-center justify-end md:justify-self-end shrink-0">
-          <span className={`text-[10px] text-zinc-400 font-bold bg-zinc-900 border border-zinc-850 px-3.5 py-1 rounded tracking-wider uppercase font-mono shadow-sm min-w-[90px] text-center whitespace-nowrap hover:text-emerald-400 transition-colors`}>
+        {/* Right Side: Post Timeline */}
+        <div className="flex items-center justify-end shrink-0">
+          <span className={`text-[8px] sm:text-[10px] text-zinc-400 font-bold bg-zinc-900 border border-zinc-850 px-2 sm:px-3.5 py-1 rounded tracking-wider uppercase font-mono shadow-sm min-w-[70px] sm:min-w-[90px] text-center whitespace-nowrap hover:text-emerald-400 transition-colors`}>
             {formatTimeAgo(post.createdAt)}
           </span>
         </div>

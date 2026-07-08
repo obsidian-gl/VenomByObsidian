@@ -53,3 +53,31 @@ export function formatTimeAgo(timestamp: any): string {
   // Otherwise return standard readable date
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
+
+/**
+ * Formats large count numbers in a clean, professional, non-design-spoiling manner.
+ * Format examples:
+ * - 0-9: "9"
+ * - 10-99: "10+", "90+"
+ * - 100-999: "100+", "900+"
+ * - 1,000-99,999: "1K+", "95.5K+"
+ * - 100,000-999,999: "1L+", "9.5L+" (Lakhs format as requested)
+ * - 1,000,000+: "1M+", "10.5M+"
+ */
+export function formatShortCount(val: number): string {
+  if (!val || val <= 0) return '0';
+  if (val < 10) return `${val}`;
+  if (val < 100) return `${Math.floor(val / 10) * 10}+`;
+  if (val < 1000) return `${Math.floor(val / 100) * 100}+`;
+  if (val < 100000) {
+    const k = val / 1000;
+    return `${k % 1 === 0 ? k : k.toFixed(1).replace(/\.0$/, '')}K+`;
+  }
+  if (val < 1000000) {
+    const l = val / 100000;
+    return `${l % 1 === 0 ? l : l.toFixed(1).replace(/\.0$/, '')}L+`;
+  }
+  const m = val / 1000000;
+  return `${m % 1 === 0 ? m : m.toFixed(1).replace(/\.0$/, '')}M+`;
+}
+

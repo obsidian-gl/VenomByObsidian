@@ -59,7 +59,7 @@ import { getClientIp, getDeviceIdentifier, isMobileDevice, getDeviceSerial } fro
 import { generatePostHash } from '../utils/crypto';
 import { compressImageToBase64 } from '../utils/image';
 import { checkIpBlockStatus } from '../utils/blockChecker';
-import { formatTimeAgo } from '../utils/time';
+import { formatTimeAgo, formatShortCount } from '../utils/time';
 import ChatCommentsPane from './ChatCommentsPane';
 import { MobileBottomBar } from './MobileBottomBar';
 
@@ -958,21 +958,22 @@ Post Venom Now : https://myvenom.vercel.app`;
   };
 
   // Share community itself deep-link
-  const handleShareCommunity = () => {
-    if (!activeCommunity) return;
-    const shareLink = `${window.location.origin}/communities?communityId=${activeCommunity.id}`;
+  const handleShareCommunity = (comm?: any) => {
+    const targetComm = (comm && typeof comm === 'object' && 'id' in comm) ? comm : activeCommunity;
+    if (!targetComm) return;
+    const shareLink = `${window.location.origin}/communities?communityId=${targetComm.id}`;
     
     const formattedMessage = `Venom
-${activeCommunity.name}
-${activeCommunity.description}
-Total Review: ${activeCommunity.viewsCount || 0}
+${targetComm.name}
+${targetComm.description}
+Total Review: ${targetComm.viewsCount || 0}
 Review Community Now : ${shareLink}
 
 Post Venom : https://myvenom.vercel.app`;
 
-    setShareModalTitle(`Share Community: ${activeCommunity.name}`);
+    setShareModalTitle(`Share Community: ${targetComm.name}`);
     setShareModalUrl(shareLink);
-    setShareModalPreview(activeCommunity.description || 'Secure Cognitive Cohort on Venom Grid');
+    setShareModalPreview(targetComm.description || 'Secure Cognitive Cohort on Venom Grid');
     setShareModalFormattedMessage(formattedMessage);
     setIsCopiedLink(false);
     setShowShareModal(true);
@@ -1289,23 +1290,10 @@ Post Venom : https://myvenom.vercel.app`;
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          const shareLink = `${window.location.origin}/communities?communityId=${comm.id}`;
-                          const formattedMessage = `Venom
-${comm.name}
-${comm.description}
-Total Review: ${comm.viewsCount || 0}
-Review Community Now : ${shareLink}
-
-Post Venom : https://myvenom.vercel.app`;
-
-                          navigator.clipboard.writeText(formattedMessage).then(() => {
-                            alert('COPILOT SYNC: Shared community information has been copied to your clipboard!');
-                          }).catch(() => {
-                            alert(`Link: ${shareLink}`);
-                          });
+                          handleShareCommunity(comm);
                         }}
                         className="p-1.5 border border-zinc-850 bg-zinc-900 rounded hover:bg-zinc-850 hover:text-emerald-400 transition-colors text-zinc-500 cursor-pointer"
-                        title="Share community deep link"
+                        title="Share community Intel"
                       >
                         <Share2 className="w-3.5 h-3.5" />
                       </button>
@@ -1623,9 +1611,9 @@ Post Venom : https://myvenom.vercel.app`;
                       </div>
 
                       {/* Micro interaction buttons row */}
-                      <div className="mt-3.5 border-t border-zinc-900/60 pt-2.5 flex items-center justify-between text-zinc-500 select-none relative z-10 gap-3">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {/* Like icon - red styled with no cheap floating animation */}
+                      <div className="mt-3.5 border-t border-zinc-900/60 pt-2.5 grid grid-cols-3 items-center text-zinc-500 select-none relative z-10 gap-2">
+                        {/* Like icon - red styled with no cheap floating animation */}
+                        <div className="flex justify-start">
                           <button
                             onClick={() => {
                               handleLikeChat(chat.id);
@@ -1635,11 +1623,13 @@ Post Venom : https://myvenom.vercel.app`;
                             }`}
                           >
                             <Heart className={`w-3.5 h-3.5 ${hasUserLiked ? 'fill-rose-500 text-rose-500' : ''}`} />
-                            <span>{chat.likesCount || 0}</span>
+                            <span>{formatShortCount(chat.likesCount || 0)}</span>
                           </button>
+                        </div>
 
-                          {/* Full 6-Emoji inline reaction bar with embedded counts (no separate generated section) */}
-                          <div className="flex items-center gap-1">
+                        {/* Full 6-Emoji inline reaction bar perfectly centered in the middle */}
+                        <div className="flex justify-center items-center">
+                          <div className="flex items-center gap-0.5 sm:gap-1">
                             {REACTIONS.map((r) => {
                               const count = chat.reactions?.[r.key] || 0;
                               const isActive = chatReaction === r.key;
@@ -1650,17 +1640,17 @@ Post Venom : https://myvenom.vercel.app`;
                                     handleReactChat(chat.id, r.key);
                                     spawnFloatingEmojis(chat.id, r.emoji);
                                   }}
-                                  className={`text-[11px] px-2 py-1 rounded-full border flex items-center gap-1 transition-all cursor-pointer select-none active:scale-90 ${
+                                  className={`text-[9px] sm:text-[11px] px-1 sm:px-1.5 py-0.5 sm:py-1 rounded-full border flex items-center gap-0.5 transition-all cursor-pointer select-none active:scale-90 ${
                                     isActive
                                       ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400 font-bold'
-                                      : 'bg-zinc-900/50 border-zinc-900 text-zinc-400 hover:border-zinc-800'
+                                      : 'bg-zinc-900/50 border-transparent text-zinc-400 hover:text-zinc-300'
                                   }`}
                                   title={`React with ${r.key}`}
                                 >
-                                  <span>{r.emoji}</span>
+                                  <span className="text-[10px] sm:text-xs">{r.emoji}</span>
                                   {count > 0 && (
-                                    <span className={`text-[10px] font-mono font-bold ${isActive ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                                      {count}
+                                    <span className={`text-[7px] sm:text-[9px] font-mono font-bold ${isActive ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                                      {formatShortCount(count)}
                                     </span>
                                   )}
                                 </button>
@@ -1670,23 +1660,25 @@ Post Venom : https://myvenom.vercel.app`;
                         </div>
 
                         {/* Comments button moved fully right */}
-                        <button
-                          onClick={() => {
-                            const nextVal = expandedCommentsChatId === chat.id ? null : chat.id;
-                            setExpandedCommentsChatId(nextVal);
-                            if (nextVal) {
-                              setTimeout(() => {
-                                document.getElementById(`chat-${chat.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                              }, 300);
-                            }
-                          }}
-                          className={`flex items-center gap-1 text-[10px] font-mono font-bold transition-colors cursor-pointer shrink-0 ${
-                            expandedCommentsChatId === chat.id ? 'text-emerald-400 font-bold' : 'hover:text-zinc-300 text-zinc-500'
-                          }`}
-                        >
-                          <MessageSquare className="w-3.5 h-3.5" />
-                          <span>{chat.commentsCount || 0}</span>
-                        </button>
+                        <div className="flex justify-end">
+                          <button
+                            onClick={() => {
+                              const nextVal = expandedCommentsChatId === chat.id ? null : chat.id;
+                              setExpandedCommentsChatId(nextVal);
+                              if (nextVal) {
+                                setTimeout(() => {
+                                  document.getElementById(`chat-${chat.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }, 300);
+                              }
+                            }}
+                            className={`flex items-center gap-1.5 text-[10px] font-mono font-bold transition-colors cursor-pointer shrink-0 ${
+                              expandedCommentsChatId === chat.id ? 'text-emerald-400 font-bold' : 'hover:text-zinc-300 text-zinc-500'
+                            }`}
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span>{formatShortCount(chat.commentsCount || 0)}</span>
+                          </button>
+                        </div>
                       </div>
 
                       {/* Expandable Comments Section */}
@@ -2630,6 +2622,7 @@ Post Venom : https://myvenom.vercel.app`;
         )}
       </AnimatePresence>
 
+      <MobileBottomBar currentPath="/communities" />
     </div>
   );
 }

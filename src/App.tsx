@@ -55,7 +55,7 @@ export default function App() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(true);
   const [activeCategory, setActiveCategory] = useState('all');
-  const [sortBy, setSortBy] = useState<'latest' | 'upvotes' | 'downvotes' | 'likes'>('latest');
+  const [sortBy, setSortBy] = useState<'latest' | 'oldest' | 'likes'>('latest');
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewPostModal, setShowNewPostModal] = useState(false);
   const [opId, setOpId] = useState('');
@@ -546,25 +546,17 @@ export default function App() {
       return true;
     })
     .sort((a, b) => {
-          if (sortBy === 'upvotes') {
-            const voteScoreA = (a.upvotesCount || 0) - (a.downvotesCount || 0);
-            const voteScoreB = (b.upvotesCount || 0) - (b.downvotesCount || 0);
-            if (voteScoreA !== voteScoreB) return voteScoreB - voteScoreA;
-            return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-          }
-          
-          if (sortBy === 'downvotes') {
-            const downVotesA = a.downvotesCount || 0;
-            const downVotesB = b.downvotesCount || 0;
-            if (downVotesA !== downVotesB) return downVotesB - downVotesA;
-            return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-          }
-
           if (sortBy === 'likes') {
             const likesA = a.likesCount || 0;
             const likesB = b.likesCount || 0;
             if (likesA !== likesB) return likesB - likesA;
             return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+          }
+
+          if (sortBy === 'oldest') {
+            const timeA = a.createdAt?.seconds || 0;
+            const timeB = b.createdAt?.seconds || 0;
+            return timeA - timeB;
           }
 
           const timeA = a.createdAt?.seconds || 0;
@@ -770,8 +762,7 @@ export default function App() {
               <div className="flex items-center gap-1">
                 {[
                   { id: 'latest', label: 'Latest' },
-                  { id: 'upvotes', label: 'Top' },
-                  { id: 'downvotes', label: 'Vetoed' },
+                  { id: 'oldest', label: 'Oldest' },
                   { id: 'likes', label: 'Liked' },
                 ].map((item) => (
                   <button
