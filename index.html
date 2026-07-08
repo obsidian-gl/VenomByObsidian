@@ -73,21 +73,6 @@
         }
       })();
     </script>
-    <!-- OneSignal Push Notifications Integration -->
-    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
-    <script>
-      window.OneSignalDeferred = window.OneSignalDeferred || [];
-      OneSignalDeferred.push(async function(OneSignal) {
-        await OneSignal.init({
-          appId: "db940ed1-7d07-48bf-822c-69a9d8d8c57d",
-          safari_web_id: "web.onesignal.auto.31f2bfbe-48d0-4a72-b7e0-d44022a2d3bb",
-          serviceWorkerPath: "sw.js",
-          notifyButton: {
-            enable: true,
-          },
-        });
-      });
-    </script>
   </head>
   <body>
     <div id="root"></div>
