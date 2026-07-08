@@ -55,7 +55,7 @@ export async function subscribeUserToPush(): Promise<{ success: boolean; error?:
     }
 
     // 2. Fetch VAPID Public Key from Server
-    const response = await fetch('/api/push-vapid-key');
+    const response = await fetch(`/api/push-vapid-key?t=${Date.now()}`);
     if (!response.ok) {
       throw new Error(`Failed to retrieve network security keys: ${response.statusText}`);
     }
@@ -65,7 +65,15 @@ export async function subscribeUserToPush(): Promise<{ success: boolean; error?:
     }
 
     // 3. Register or get Service Worker
-    const registration = await navigator.serviceWorker.ready;
+    let registration = await navigator.serviceWorker.getRegistration();
+    if (!registration) {
+      registration = await navigator.serviceWorker.register('/sw.js');
+    }
+    // Force update to download the new sw.js with the /api/ bypass rules
+    await registration.update().catch(() => {});
+    
+    // Wait for the worker to be fully ready
+    registration = await navigator.serviceWorker.ready;
 
     // 4. Subscribe with Push Manager
     const applicationServerKey = urlBase64ToUint8Array(publicKey);

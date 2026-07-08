@@ -47,6 +47,9 @@ self.addEventListener('fetch', (event) => {
   // Skip Chrome extensions and non-HTTP/HTTPS sources
   if (!url.protocol.startsWith('http')) return;
 
+  // Skip API endpoints - bypass service worker cache
+  if (url.pathname.startsWith('/api/')) return;
+
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
