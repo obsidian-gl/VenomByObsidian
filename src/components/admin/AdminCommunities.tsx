@@ -590,7 +590,9 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               
               {/* LEFT COLUMN: LIST OF ALL COMMUNITIES (5/12) */}
-              <div className="lg:col-span-5 bg-zinc-950 border border-zinc-900 rounded-xl flex flex-col max-h-[70vh] overflow-hidden">
+              <div className={`lg:col-span-5 bg-zinc-950 border border-zinc-900 rounded-xl flex flex-col h-[75vh] lg:max-h-[70vh] overflow-hidden ${
+                selectedComm ? 'hidden lg:flex' : 'flex'
+              }`}>
                 <div className="p-4 border-b border-zinc-900 bg-zinc-950 shrink-0 flex justify-between items-center">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">SECTOR INDEX</span>
                   <span className="text-[10px] font-mono bg-zinc-900 text-zinc-500 px-2 py-0.5 rounded">
@@ -668,13 +670,23 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
               </div>
 
               {/* RIGHT COLUMN: DETAILED DISPATCH INSPECT PANEL (7/12) */}
-              <div className="lg:col-span-7 bg-zinc-950 border border-zinc-900 rounded-xl flex flex-col min-h-[50vh] max-h-[70vh] overflow-hidden">
+              <div className={`lg:col-span-7 bg-zinc-950 border border-zinc-900 rounded-xl flex flex-col h-[75vh] lg:max-h-[70vh] overflow-hidden ${
+                selectedComm ? 'flex' : 'hidden lg:flex'
+              }`}>
                 {selectedComm ? (
                   <>
                     {/* Selected Community Metadata Inspector Header */}
                     <div className="p-4 border-b border-zinc-900 bg-zinc-950 shrink-0">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">SECTOR TELEMETRY INSPECTOR</span>
+                      <div className="flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setSelectedComm(null)}
+                            className="lg:hidden p-1.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+                          >
+                            <ArrowLeft className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">SECTOR TELEMETRY INSPECTOR</span>
+                        </div>
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => setIsEditingComm(!isEditingComm)}
@@ -698,7 +710,7 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
 
                       {isEditingComm ? (
                         /* COMMUNITY PARAMETERS FORM */
-                        <div className="mt-4 p-4 bg-black/40 border border-zinc-900 rounded-lg space-y-4 text-xs overflow-y-auto max-h-[50vh] scrollbar-thin">
+                        <div className="mt-4 p-4 bg-black/40 border border-zinc-900 rounded-lg space-y-4 text-xs overflow-y-auto flex-1 scrollbar-thin max-h-[45vh] lg:max-h-none">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                               <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1">Community Name</label>

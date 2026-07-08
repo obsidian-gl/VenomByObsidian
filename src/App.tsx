@@ -29,6 +29,7 @@ import ReportPage from './components/ReportPage';
 import AdminReports from './components/admin/AdminReports';
 import CommunitiesPage from './components/CommunitiesPage';
 import AdminCommunities from './components/admin/AdminCommunities';
+import AdminCommunityReports from './components/admin/AdminCommunityReports';
 import { 
   Cpu, 
   Search,
@@ -80,6 +81,20 @@ export default function App() {
     (window as any).triggerNewPost = () => {
       handleNewPostClick();
     };
+
+    // Lock screen orientation to startup orientation if supported
+    const lockOrientation = async () => {
+      if (typeof window !== 'undefined' && window.screen && window.screen.orientation && (window.screen.orientation as any).lock) {
+        try {
+          const orientationType = window.innerHeight > window.innerWidth ? 'portrait' : 'landscape';
+          await (window.screen.orientation as any).lock(orientationType);
+        } catch (err) {
+          console.warn('Orientation lock not supported or requires fullscreen:', err);
+        }
+      }
+    };
+    lockOrientation();
+
     return () => {
       delete (window as any).openPwaInstallModal;
       delete (window as any).triggerNewPost;
@@ -563,6 +578,21 @@ export default function App() {
           const timeB = b.createdAt?.seconds || 0;
           return timeB - timeA;
         });
+
+  // Admin community reports terminal route check
+  if (currentPath.startsWith('/admin/report-communities') || currentPath.startsWith('/admin/community-reports')) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -15 }}
+        transition={{ duration: 0.22, ease: 'easeOut' }}
+        className="min-h-screen bg-[#030303]"
+      >
+        <AdminCommunityReports />
+      </motion.div>
+    );
+  }
 
   // Admin reports terminal route check
   if (currentPath.startsWith('/admin/report')) {

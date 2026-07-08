@@ -132,11 +132,11 @@ export default function GuidelinesPage({ onBackToHome }: GuidelinesPageProps) {
                 </div>
                 <div className="flex items-start gap-2 bg-zinc-900/10 p-2 border border-zinc-900 rounded">
                   <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
-                  <span><strong>Interactive Voting Rights:</strong> Cast real-time anonymous votes on Q&As and Polls with immediate, zero-delay feedback updates.</span>
+                  <span><strong>Interactive Participation:</strong> Vote on interactive Q&As and Polls, and react with custom emojis to discuss ideas.</span>
                 </div>
                 <div className="flex items-start gap-2 bg-zinc-900/10 p-2 border border-zinc-900 rounded">
                   <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
-                  <span><strong>Thread Amplification:</strong> Ask questions, add responses, and upvote/downvote content to bubble key conversations up.</span>
+                  <span><strong>Thread Amplification:</strong> Ask questions, add responses, and like or react to content to bubble key conversations up.</span>
                 </div>
                 <div className="flex items-start gap-2 bg-zinc-900/10 p-2 border border-zinc-900 rounded">
                   <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />

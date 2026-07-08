@@ -587,6 +587,28 @@ export default function AdminReports() {
     }
   };
 
+  // PERMANENTLY DELETE IP BLOCK FROM DATABASE (PURGE BLOCKLIST DATA)
+  const handleDeleteIpBlock = async (ip: string) => {
+    if (!confirm(`Are you sure you want to permanently delete IP block data for ${ip}? This deletes the log record completely.`)) {
+      return;
+    }
+    try {
+      const blockRef = doc(db, 'blockedIps', ip);
+      const snap = await getDoc(blockRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.imei) {
+          await deleteDoc(doc(db, 'blockedImeis', data.imei)).catch(() => {});
+        }
+      }
+      await deleteDoc(blockRef);
+      alert(`IP Block record for ${ip} successfully deleted.`);
+    } catch (err) {
+      console.error("Failed to delete IP block:", err);
+      alert("Failed to delete block record.");
+    }
+  };
+
   // ADJUST EXPRIY TIME (+/- Days)
   const handleAdjustExpiry = async (ip: string, daysOffset: number) => {
     try {
@@ -1135,6 +1157,14 @@ export default function AdminReports() {
                               Restore Block
                             </button>
                           )}
+
+                          <button
+                            onClick={() => handleDeleteIpBlock(block.ip)}
+                            className="p-1.5 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-500/20 hover:border-rose-500 text-rose-400 rounded transition-colors cursor-pointer flex items-center justify-center"
+                            title="PERMANENTLY DELETE BLOCK RECORD FROM DATABASE"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
                     ))}

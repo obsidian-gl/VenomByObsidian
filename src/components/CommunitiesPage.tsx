@@ -52,7 +52,8 @@ import {
   Facebook,
   MessageCircle,
   Copy,
-  ExternalLink
+  ExternalLink,
+  Instagram
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getClientIp, getDeviceIdentifier, isMobileDevice, getDeviceSerial } from '../utils/ip';
@@ -386,6 +387,38 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
       }
     }
   }, [communities, initialDeepLinkProcessed]);
+
+  // Synchronize activeCommunity and verify password gate in real-time
+  useEffect(() => {
+    if (!activeCommunity || communities.length === 0 || !deviceSig?.value) return;
+    const latestComm = communities.find(c => c.id === activeCommunity.id);
+    if (latestComm) {
+      const isCreator = latestComm.createdByImei === deviceSig.value;
+      if (latestComm.password && !isCreator) {
+        const isUnlocked = localStorage.getItem(`unlocked_comm_${latestComm.id}`) === 'true';
+        const storedPwd = localStorage.getItem(`unlocked_comm_pwd_${latestComm.id}`) || '';
+        if (!isUnlocked || storedPwd !== latestComm.password) {
+          // Password has changed, kick the user out of activeCommunity and show password gate modal
+          setActiveCommunity(null);
+          setShowPasswordGate(latestComm);
+          return;
+        }
+      }
+      
+      // Sync any update in the active community details to state
+      if (
+        latestComm.name !== activeCommunity.name ||
+        latestComm.description !== activeCommunity.description ||
+        latestComm.password !== activeCommunity.password ||
+        latestComm.imageUrl !== activeCommunity.imageUrl ||
+        latestComm.allowUserPost !== activeCommunity.allowUserPost ||
+        latestComm.userLimit !== activeCommunity.userLimit ||
+        latestComm.isBlocked !== activeCommunity.isBlocked
+      ) {
+        setActiveCommunity(latestComm);
+      }
+    }
+  }, [communities, activeCommunity, deviceSig]);
 
   // Device unique visits counter check & community entry trigger
   const handleEnterCommunityDirect = async (comm: any, sharedChatId?: string | null) => {
@@ -941,19 +974,18 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
     // Format a beautiful, highly detailed share message matching the exact user template
     const rawType = chatObj?.type || 'text';
     const typeLabel = rawType === 'qa' ? 'Q&A' : rawType.charAt(0).toUpperCase() + rawType.slice(1);
-    const chatTitle = chatObj?.content ? `"${chatObj.content}"` : '"Attached Graphic"';
-    const chatDesc = chatObj?.imageUrl ? '"Image Attachment"' : rawType === 'poll' ? '"Interactive Poll"' : rawType === 'qa' ? '"Q&A Board"' : '"Text Dispatch"';
 
     const formattedMessage = `Venom
+
 ${activeCommunity.name}
 ${activeCommunity.description}
 
-Review This Chat (Type of chat: ${typeLabel}):
-${chatTitle}
-${chatDesc}
+Review this chat (${typeLabel})
+"${chatObj?.content || ''}"
+
 Link: ${shareLink}
 
-Post Venom Now : https://myvenom.vercel.app`;
+Post Venom Now: https://myvenom.vercel.app`;
 
     setShareModalTitle('Share Chat Message');
     setShareModalUrl(shareLink);
@@ -970,12 +1002,15 @@ Post Venom Now : https://myvenom.vercel.app`;
     const shareLink = `${window.location.origin}/communities?communityId=${targetComm.id}`;
     
     const formattedMessage = `Venom
+
 ${targetComm.name}
 ${targetComm.description}
-Total Review: ${targetComm.viewsCount || 0}
-Review Community Now : ${shareLink}
 
-Post Venom : https://myvenom.vercel.app`;
+Total Review: ${targetComm.viewsCount || 0}
+
+Link: ${shareLink}
+
+Post Venom Now: https://myvenom.vercel.app`;
 
     setShareModalTitle(`Share Community: ${targetComm.name}`);
     setShareModalUrl(shareLink);
@@ -997,6 +1032,12 @@ Post Venom : https://myvenom.vercel.app`;
       icon: Twitter,
       color: 'hover:text-sky-400 hover:border-sky-500/30 text-emerald-500/70 hover:bg-sky-950/15',
       url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareModalFormattedMessage)}`
+    },
+    {
+      name: 'Instagram',
+      icon: Instagram,
+      color: 'hover:text-pink-400 hover:border-pink-500/30 text-emerald-500/70 hover:bg-pink-950/15',
+      url: `https://www.instagram.com/`
     },
     {
       name: 'Telegram',
@@ -1690,14 +1731,7 @@ Post Venom : https://myvenom.vercel.app`;
             </div>
 
             {/* Bottom active entry messaging panel (WhatsApp styled) */}
-            {(!activeCommunity.allowUserPost && activeCommunity.createdByImei !== deviceSig.value) ? (
-              <div className="p-4 border-t border-zinc-900 bg-zinc-950/80 flex items-center justify-center gap-2.5 shrink-0 select-none text-center">
-                <Lock className="w-4 h-4 text-rose-500 animate-pulse" />
-                <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wider">
-                  RESTRICTED COHORT: Only the creator is authorized to post messages inside this community.
-                </span>
-              </div>
-            ) : (
+            {(!activeCommunity.allowUserPost && activeCommunity.createdByImei !== deviceSig.value) ? null : (
               <form onSubmit={handleSendChatSubmit} className="p-3 border-t border-zinc-900 bg-zinc-950 flex flex-col shrink-0 gap-2 relative">
                 {chatError && (
                   <div className="absolute top-0 left-0 right-0 -translate-y-full bg-rose-950/25 border-t border-rose-500/20 text-rose-400 text-[10px] py-1.5 px-4 z-20 flex justify-between items-center leading-relaxed">
@@ -2405,6 +2439,11 @@ Post Venom : https://myvenom.vercel.app`;
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={() => {
+                            if (platform.name === 'Instagram') {
+                              navigator.clipboard.writeText(shareModalFormattedMessage);
+                              setIsCopiedLink(true);
+                              setTimeout(() => setIsCopiedLink(false), 2000);
+                            }
                             setTimeout(() => setShowShareModal(false), 500);
                           }}
                           className={`flex items-center gap-2.5 p-2 rounded-lg border border-zinc-900 bg-zinc-900/10 text-zinc-400 text-xs transition-all duration-200 ${platform.color} cursor-pointer hover:bg-zinc-900/40 font-sans`}

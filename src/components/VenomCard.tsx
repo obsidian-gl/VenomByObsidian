@@ -26,7 +26,8 @@ import {
   ExternalLink,
   Send,
   Smile,
-  Flag
+  Flag,
+  Instagram
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -495,21 +496,24 @@ export default function VenomCard({
     : 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png';
 
   // Format a simple, humble and elegant dispatch message matching the user request
-  const cleanExcerpt = post.content 
-    ? post.content.length > 200 
-      ? `"${post.content.substring(0, 200)}..."`
-      : `"${post.content}"`
-    : '';
-
   const dispatchText = `Venom
 
-Review —
+Review Post:
 "${post.title}"
-${cleanExcerpt ? `${cleanExcerpt}\n` : ''}Link: ${shareUrl}
+"${post.content || ''}"
 
-Use it now: https://myvenom.vercel.app`;
+Link: ${shareUrl}
 
-  const twitterDispatchText = `Venom\n\nReview —\n"${post.title}"\nLink: ${shareUrl}`;
+Post Venom Now: https://myvenom.vercel.app`;
+
+  const twitterDispatchText = `Venom
+
+Review Post:
+"${post.title}"
+
+Link: ${shareUrl}
+
+Post Venom Now: https://myvenom.vercel.app`;
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(shareUrl);
@@ -545,6 +549,12 @@ Use it now: https://myvenom.vercel.app`;
       icon: Twitter,
       color: 'hover:text-sky-400 hover:border-sky-500/30 text-emerald-500/70 hover:bg-sky-950/15',
       url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(twitterDispatchText)}&url=${encodeURIComponent(shareUrl)}`
+    },
+    {
+      name: 'Instagram',
+      icon: Instagram,
+      color: 'hover:text-pink-400 hover:border-pink-500/30 text-emerald-500/70 hover:bg-pink-950/15',
+      url: `https://www.instagram.com/`
     },
     {
       name: 'Telegram',
@@ -1207,6 +1217,11 @@ Use it now: https://myvenom.vercel.app`;
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={() => {
+                            if (platform.name === 'Instagram') {
+                              navigator.clipboard.writeText(dispatchText);
+                              setIsCopiedLink(true);
+                              setTimeout(() => setIsCopiedLink(false), 2000);
+                            }
                             setTimeout(() => setShowShareModal(false), 500);
                           }}
                           className={`flex items-center gap-2.5 p-2 rounded-lg border border-zinc-900 bg-zinc-900/10 text-zinc-400 text-xs transition-all duration-200 ${platform.color} cursor-pointer hover:bg-zinc-900/40 font-sans`}

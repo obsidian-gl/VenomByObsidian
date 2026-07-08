@@ -261,28 +261,7 @@ export const AdminEditModal: React.FC<AdminEditModalProps> = ({ post, onClose, o
               />
             </div>
 
-            {/* Upvotes */}
-            <div className="space-y-1">
-              <label className="text-[9px] uppercase text-zinc-500 block font-bold">Network Upvotes</label>
-              <input
-                type="number"
-                value={editUpvotes}
-                onChange={(e) => setEditUpvotes(Number(e.target.value))}
-                className="w-full bg-zinc-900 border border-zinc-850 focus:border-emerald-500/30 rounded px-3 py-1.5 text-xs text-zinc-200 focus:outline-none text-emerald-400 font-bold"
-              />
-            </div>
-
-            {/* Downvotes */}
-            <div className="space-y-1">
-              <label className="text-[9px] uppercase text-zinc-500 block font-bold">Network Downvotes</label>
-              <input
-                type="number"
-                value={editDownvotes}
-                onChange={(e) => setEditDownvotes(Number(e.target.value))}
-                className="w-full bg-zinc-900 border border-zinc-850 focus:border-emerald-500/30 rounded px-3 py-1.5 text-xs text-zinc-200 focus:outline-none text-rose-400 font-bold"
-              />
-            </div>
-          </div>
+           </div>
 
           {/* Image URL Section */}
           {postType === 'image' && (

@@ -243,11 +243,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ posts, onNavigat
             <AdminTelemetry posts={posts} />
 
             {/* THREAT RAPID-RESPONSE ACCESS BAR & COMMUNITY CONTROL PANEL */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Report Triage */}
-              <div className="bg-zinc-950 border border-emerald-500/10 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl relative overflow-hidden">
+              <div className="bg-zinc-950 border border-emerald-500/10 p-4 rounded-xl flex flex-col items-stretch justify-between gap-4 shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/[0.02] rounded-full blur-xl pointer-events-none" />
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-3">
                   <div className="w-8 h-8 rounded-full bg-rose-950/20 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0">
                     <ShieldAlert className="w-4 h-4 animate-pulse" />
                   </div>
@@ -255,7 +255,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ posts, onNavigat
                     <span className="text-[10px] font-mono font-bold text-rose-400 uppercase tracking-widest block leading-none">
                       Security Incident Triage Center
                     </span>
-                    <span className="text-[9px] text-zinc-500 uppercase font-sans mt-1.5 block">
+                    <span className="text-[9px] text-zinc-500 uppercase font-sans mt-1.5 block leading-relaxed">
                       Monitor user-submitted reports, content policy violations, and device quarantine bans.
                     </span>
                   </div>
@@ -266,17 +266,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ posts, onNavigat
                     window.history.pushState({}, '', '/admin/report');
                     window.dispatchEvent(new PopStateEvent('popstate'));
                   }}
-                  className="w-full sm:w-auto px-4 py-2 bg-rose-950/20 border border-rose-500/30 hover:border-rose-500 text-rose-400 text-[10px] font-bold rounded uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors shrink-0 cursor-pointer"
+                  className="w-full px-4 py-2 bg-rose-950/20 border border-rose-500/30 hover:border-rose-500 text-rose-400 text-[10px] font-bold rounded uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors shrink-0 cursor-pointer"
                 >
                   <span>Launch Reports Terminal</span>
                   <ExternalLink className="w-3.5 h-3.5 text-rose-400" />
                 </button>
               </div>
 
-              {/* Communities control */}
-              <div className="bg-zinc-950 border border-emerald-500/10 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl relative overflow-hidden">
+              {/* Community Reports Triage */}
+              <div className="bg-zinc-950 border border-emerald-500/10 p-4 rounded-xl flex flex-col items-stretch justify-between gap-4 shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/[0.02] rounded-full blur-xl pointer-events-none" />
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-emerald-950/20 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                    <ShieldAlert className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-widest block leading-none">
+                      Community Violation Triage Center
+                    </span>
+                    <span className="text-[9px] text-zinc-500 uppercase font-sans mt-1.5 block leading-relaxed">
+                      Monitor virtual community reports, footprints of creator & reporter, and lift/apply bans.
+                    </span>
+                  </div>
+                </div>
+                
+                <button
+                  onClick={() => {
+                    window.history.pushState({}, '', '/admin/report-communities');
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                  }}
+                  className="w-full px-4 py-2 bg-emerald-950/20 border border-emerald-500/30 hover:border-emerald-500 text-emerald-400 text-[10px] font-bold rounded uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors shrink-0 cursor-pointer"
+                >
+                  <span>Community Reports Terminal</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
+                </button>
+              </div>
+
+              {/* Communities control */}
+              <div className="bg-zinc-950 border border-emerald-500/10 p-4 rounded-xl flex flex-col items-stretch justify-between gap-4 shadow-xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/[0.02] rounded-full blur-xl pointer-events-none" />
+                <div className="flex items-start gap-3">
                   <div className="w-8 h-8 rounded-full bg-emerald-950/20 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
                     <Users className="w-4 h-4" />
                   </div>
@@ -284,7 +313,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ posts, onNavigat
                     <span className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-widest block leading-none">
                       Group Community Operations Terminal
                     </span>
-                    <span className="text-[9px] text-zinc-500 uppercase font-sans mt-1.5 block">
+                    <span className="text-[9px] text-zinc-500 uppercase font-sans mt-1.5 block leading-relaxed">
                       Manage virtual communities, review chats, and enforce global moderation overrides.
                     </span>
                   </div>
@@ -295,7 +324,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ posts, onNavigat
                     window.history.pushState({}, '', '/admin/communities');
                     window.dispatchEvent(new PopStateEvent('popstate'));
                   }}
-                  className="w-full sm:w-auto px-4 py-2 bg-emerald-950/20 border border-emerald-500/30 hover:border-emerald-500 text-emerald-400 text-[10px] font-bold rounded uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors shrink-0 cursor-pointer"
+                  className="w-full px-4 py-2 bg-emerald-950/20 border border-emerald-500/30 hover:border-emerald-500 text-emerald-400 text-[10px] font-bold rounded uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors shrink-0 cursor-pointer"
                 >
                   <span>Admin Communities</span>
                   <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
