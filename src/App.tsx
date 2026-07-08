@@ -51,6 +51,7 @@ import { checkIpBlockStatus, BlockStatus } from './utils/blockChecker';
 import QuarantineNoticeModal from './components/QuarantineNoticeModal';
 import { InstallPwaModal } from './components/InstallPwaModal';
 import { MobileBottomBar } from './components/MobileBottomBar';
+import { PushNotificationPrompt } from './components/PushNotificationPrompt';
 
 export default function App() {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -1079,6 +1080,8 @@ export default function App() {
         onClose={() => setShowInstallPwaModal(false)} 
         appType={installPwaAppType}
       />
+
+      <PushNotificationPrompt />
 
       <MobileBottomBar currentPath={currentPath} />
 

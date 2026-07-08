@@ -7,8 +7,63 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
-import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './src/firebase.js';
+import webPush from 'web-push';
+
+let vapidKeys: { publicKey: string; privateKey: string } | null = null;
+
+async function getVapidKeys() {
+  if (vapidKeys) return vapidKeys;
+  if (!db) {
+    const keys = webPush.generateVAPIDKeys();
+    vapidKeys = keys;
+    return keys;
+  }
+  
+  try {
+    const keyDocRef = doc(db, 'system', 'vapidKeys');
+    const keyDoc = await getDoc(keyDocRef);
+    if (keyDoc.exists()) {
+      const data = keyDoc.data();
+      if (data && data.publicKey && data.privateKey) {
+        vapidKeys = {
+          publicKey: data.publicKey,
+          privateKey: data.privateKey
+        };
+        webPush.setVapidDetails(
+          'mailto:work.tilakpopatfilms@gmail.com',
+          vapidKeys.publicKey,
+          vapidKeys.privateKey
+        );
+        return vapidKeys;
+      }
+    }
+    
+    const generated = webPush.generateVAPIDKeys();
+    await setDoc(keyDocRef, {
+      publicKey: generated.publicKey,
+      privateKey: generated.privateKey,
+      updatedAt: new Date().toISOString()
+    });
+    vapidKeys = generated;
+    webPush.setVapidDetails(
+      'mailto:work.tilakpopatfilms@gmail.com',
+      vapidKeys.publicKey,
+      vapidKeys.privateKey
+    );
+    return vapidKeys;
+  } catch (err) {
+    console.error('Error fetching/generating VAPID keys, using dynamic fallback:', err);
+    const generated = webPush.generateVAPIDKeys();
+    webPush.setVapidDetails(
+      'mailto:work.tilakpopatfilms@gmail.com',
+      generated.publicKey,
+      generated.privateKey
+    );
+    return generated;
+  }
+}
 
 async function getPostByHash(hash: string) {
   if (!db) return null;
@@ -67,6 +122,9 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Support JSON payloads for web push subscriptions
+  app.use(express.json());
+
   // Set up Vite server instance outside for use in the dynamic index.html interceptor
   let vite: any = null;
   if (process.env.NODE_ENV !== 'production') {
@@ -97,6 +155,101 @@ async function startServer() {
       ip = '127.0.0.1';
     }
     res.json({ ip });
+  });
+
+  // Get active VAPID public key
+  app.get('/api/push-vapid-key', async (req, res) => {
+    try {
+      const keys = await getVapidKeys();
+      res.json({ publicKey: keys.publicKey });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Save/Register push subscription
+  app.post('/api/push-subscribe', async (req, res) => {
+    const { subscription, deviceImei } = req.body;
+    if (!subscription || !subscription.endpoint) {
+      return res.status(400).json({ error: 'Subscription data with endpoint is required.' });
+    }
+
+    try {
+      // Use URL-safe Base64 representation of endpoint as document ID
+      const endpointHash = Buffer.from(subscription.endpoint).toString('base64url');
+      const subDocRef = doc(db, 'pushSubscriptions', endpointHash);
+
+      await setDoc(subDocRef, {
+        subscription,
+        deviceImei: deviceImei || 'WEB-USER',
+        subscribedAt: new Date().toISOString()
+      });
+
+      res.status(201).json({ success: true, message: 'Subscription successfully registered.' });
+    } catch (err: any) {
+      console.error('Failed to save push subscription:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Broadcast push notifications to all registered devices
+  app.post('/api/push-send', async (req, res) => {
+    const { title, body, url } = req.body;
+    if (!title || !body) {
+      return res.status(400).json({ error: 'Title and body are required.' });
+    }
+
+    try {
+      // Initialize web-push config
+      await getVapidKeys();
+
+      const subCollectionRef = collection(db, 'pushSubscriptions');
+      const subSnap = await getDocs(subCollectionRef);
+
+      if (subSnap.empty) {
+        return res.json({ success: true, sentCount: 0, message: 'No devices have registered for push notifications.' });
+      }
+
+      const payload = JSON.stringify({
+        title,
+        body,
+        url: url || '/',
+        icon: 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
+        badge: 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png'
+      });
+
+      let successCount = 0;
+      let failureCount = 0;
+
+      const promises = subSnap.docs.map(async (subDoc) => {
+        const subData = subDoc.data();
+        if (subData && subData.subscription) {
+          try {
+            await webPush.sendNotification(subData.subscription, payload);
+            successCount++;
+          } catch (err: any) {
+            console.error(`Failed to send notification to doc ${subDoc.id}:`, err.message);
+            failureCount++;
+            // Automatically clean up expired (statusCode 410 / 404) subscriptions
+            if (err.statusCode === 410 || err.statusCode === 404) {
+              await deleteDoc(doc(db, 'pushSubscriptions', subDoc.id)).catch(() => {});
+            }
+          }
+        }
+      });
+
+      await Promise.all(promises);
+
+      res.json({
+        success: true,
+        sentCount: successCount,
+        failedCount: failureCount,
+        message: `Successfully broadcasted to ${successCount} devices, pruned ${failureCount} obsolete registration(s).`
+      });
+    } catch (err: any) {
+      console.error('Failed to broadcast push notification:', err);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Redirect root favicon requests to the custom favicon to guarantee tab display
