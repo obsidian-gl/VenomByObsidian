@@ -97,9 +97,8 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
   // Communities list states
   const [communities, setCommunities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sortBy, setSortBy] = useState<'latest' | 'most_joined' | 'least_joined'>('latest');
+  const [sortBy, setSortBy] = useState<'latest' | 'oldest' | 'most_joined' | 'least_joined'>('latest');
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterRegion, setFilterRegion] = useState('all');
 
   // Active chat view state
   const [activeCommunity, setActiveCommunity] = useState<any | null>(null);
@@ -226,8 +225,11 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
       // Check if user has posted at least 1 post on the main feed
       const hasPosted = posts.some(
         p => p.postedFromIp === ip || p.postedFromImei === sig.value
-      );
-      setHasPostedAtLeastOnce(hasPosted);
+      ) || localStorage.getItem('venom_has_posted_at_least_once') === 'true';
+      if (hasPosted) {
+        setHasPostedAtLeastOnce(true);
+        localStorage.setItem('venom_has_posted_at_least_once', 'true');
+      }
     };
 
     initDevice();
@@ -454,7 +456,7 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
       setCError('CLEARANCE SUSPENDED: You must make at least 1 main grid Venom post from this device first.');
       return;
     }
-    if (!cName.trim() || !cDesc.trim() || !cReligion.trim()) {
+    if (!cName.trim() || !cDesc.trim()) {
       setCError('All highlighted fields are required to seed.');
       return;
     }
@@ -479,7 +481,7 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
         id: commId,
         name: cName.trim(),
         description: cDesc.trim(),
-        religion: cReligion.trim(),
+        religion: '',
         userLimit: cUserLimit ? parseInt(cUserLimit) : null,
         allowUserPost: cAllowUserPost,
         password: cPassword.trim() || '',
@@ -496,6 +498,10 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
 
       await setDoc(customCommRef, payload);
       
+      // Persist the clearance as well so user doesn't need to post again
+      localStorage.setItem('venom_has_posted_at_least_once', 'true');
+      setHasPostedAtLeastOnce(true);
+
       // Auto pin the created community
       const updatedPins = [...pinnedIds, commId].slice(0, 5);
       setPinnedIds(updatedPins);
@@ -535,7 +541,7 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
       setEditError('SECURITY ALERT: Authorization mismatch.');
       return;
     }
-    if (!editName.trim() || !editDesc.trim() || !editReligion.trim()) {
+    if (!editName.trim() || !editDesc.trim()) {
       setEditError('Highlighted fields are mandatory.');
       return;
     }
@@ -548,7 +554,7 @@ export default function CommunitiesPage({ onBackToHome, posts }: CommunitiesPage
       const updatedFields = {
         name: editName.trim(),
         description: editDesc.trim(),
-        religion: editReligion.trim(),
+        religion: '',
         userLimit: editUserLimit ? parseInt(editUserLimit) : null,
         allowUserPost: editAllowUserPost,
         password: editPassword.trim() || '',
@@ -1071,18 +1077,12 @@ Post Venom : https://myvenom.vercel.app`;
       // 1. Filter blocked/quarantined communities
       if (isCommunityBlocked(c) || (c.reportsCount || 0) >= 100) return false;
 
-      // 2. Search query by Name, Description, and Religion/Area
+      // 2. Search query by Name, Description
       if (searchTerm.trim() !== '') {
         const queryTerm = searchTerm.toLowerCase();
         const matchesName = c.name?.toLowerCase().includes(queryTerm);
         const matchesDesc = c.description?.toLowerCase().includes(queryTerm);
-        const matchesRel = c.religion?.toLowerCase().includes(queryTerm);
-        return matchesName || matchesDesc || matchesRel;
-      }
-
-      // 3. Dropdown region filter
-      if (filterRegion !== 'all' && c.religion !== filterRegion) {
-        return false;
+        return matchesName || matchesDesc;
       }
 
       return true;
@@ -1099,6 +1099,11 @@ Post Venom : https://myvenom.vercel.app`;
       if (sortBy === 'least_joined') {
         return (a.viewsCount || 0) - (b.viewsCount || 0);
       }
+      if (sortBy === 'oldest') {
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        return timeA - timeB;
+      }
 
       // Latest default
       const timeA = a.createdAt?.seconds || 0;
@@ -1106,14 +1111,11 @@ Post Venom : https://myvenom.vercel.app`;
       return timeB - timeA;
     });
 
-  // Extract list of all unique regions for the search filter
-  const uniqueRegions = Array.from(new Set(communities.map(c => c.religion).filter(Boolean)));
-
   const handleOpenSettings = () => {
     if (!activeCommunity) return;
     setEditName(activeCommunity.name);
     setEditDesc(activeCommunity.description);
-    setEditReligion(activeCommunity.religion);
+    setEditReligion('');
     setEditUserLimit(activeCommunity.userLimit ? activeCommunity.userLimit.toString() : '');
     setEditAllowUserPost(activeCommunity.allowUserPost);
     setEditPassword(activeCommunity.password);
@@ -1150,7 +1152,7 @@ Post Venom : https://myvenom.vercel.app`;
           <div className="relative">
             <input
               type="text"
-              placeholder="Search by Name, Desc, Area..."
+              placeholder="Search by Name, Desc..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-zinc-900/60 border border-zinc-850 focus:border-emerald-500/40 rounded-lg pl-9 pr-4 py-2 text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none transition-colors"
@@ -1158,28 +1160,17 @@ Post Venom : https://myvenom.vercel.app`;
             <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-3" />
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center">
             {/* Sort controls */}
             <select
               value={sortBy}
               onChange={(e: any) => setSortBy(e.target.value)}
-              className="flex-1 bg-zinc-900 border border-zinc-850 rounded px-2 py-1.5 text-[10px] font-mono font-bold text-zinc-400 focus:outline-none cursor-pointer hover:border-zinc-800 transition-colors"
+              className="w-full bg-zinc-900 border border-zinc-850 rounded px-2 py-1.5 text-[10px] font-mono font-bold text-zinc-400 focus:outline-none cursor-pointer hover:border-zinc-800 transition-colors"
             >
               <option value="latest">Sort: Latest</option>
+              <option value="oldest">Sort: Oldest</option>
               <option value="most_joined">Sort: Most Joined</option>
               <option value="least_joined">Sort: Least Joined</option>
-            </select>
-
-            {/* Filter region */}
-            <select
-              value={filterRegion}
-              onChange={(e) => setFilterRegion(e.target.value)}
-              className="flex-1 bg-zinc-900 border border-zinc-850 rounded px-2 py-1.5 text-[10px] font-mono font-bold text-zinc-400 focus:outline-none cursor-pointer hover:border-zinc-800 transition-colors"
-            >
-              <option value="all">Region: All</option>
-              {uniqueRegions.map((reg, i) => (
-                <option key={i} value={reg}>{reg}</option>
-              ))}
             </select>
           </div>
 
@@ -1265,10 +1256,6 @@ Post Venom : https://myvenom.vercel.app`;
                   {/* Actions & Meta Footer */}
                   <div className="flex items-center justify-between pt-2.5 border-t border-zinc-900/60 w-full flex-wrap gap-2">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[9px] font-mono bg-zinc-900 px-2 py-0.5 rounded text-zinc-400 flex items-center gap-1">
-                        <Globe className="w-2.5 h-2.5 text-emerald-500" />
-                        <span>{comm.religion}</span>
-                      </span>
                       <span className="text-[9px] font-mono bg-zinc-900 px-2 py-0.5 rounded text-zinc-400 flex items-center gap-1">
                         <Users className="w-2.5 h-2.5 text-emerald-500" />
                         <span>{comm.viewsCount || 0} Reviews</span>
@@ -1362,9 +1349,6 @@ Post Venom : https://myvenom.vercel.app`;
                     <h2 className="text-sm font-bold text-zinc-100 truncate leading-none">
                       {activeCommunity.name}
                     </h2>
-                    <span className="text-[9px] font-mono text-zinc-500 uppercase leading-none bg-zinc-900/80 px-1.5 py-0.5 rounded border border-zinc-850">
-                      {activeCommunity.religion}
-                    </span>
                   </div>
                   <p className="text-[10px] text-zinc-500 truncate mt-1">
                     {activeCommunity.description}
@@ -2002,19 +1986,6 @@ Post Venom : https://myvenom.vercel.app`;
                   />
                 </div>
 
-                {/* Religion / Area */}
-                <div className="space-y-1">
-                  <label className="text-[9px] font-mono font-bold text-zinc-500 block uppercase tracking-wider">RELIGION (COUNTRY / CONTINENT OR WORLD AREA)</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Asia, Europe, USA, Global..."
-                    value={cReligion}
-                    onChange={(e) => setCReligion(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-850 focus:border-emerald-500/30 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none placeholder-zinc-700"
-                  />
-                </div>
-
                 {/* Limits and Password Options (Side by Side) */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
@@ -2146,19 +2117,6 @@ Post Venom : https://myvenom.vercel.app`;
                     value={editDesc}
                     onChange={(e) => setEditDesc(e.target.value)}
                     className="w-full bg-zinc-900 border border-zinc-850 focus:border-emerald-500/30 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none resize-none"
-                  />
-                </div>
-
-                {/* Religion / Area */}
-                <div className="space-y-1">
-                  <label className="text-[9px] font-mono font-bold text-zinc-500 block uppercase tracking-wider">RELIGION (COUNTRY / CONTINENT OR WORLD AREA)</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Area location..."
-                    value={editReligion}
-                    onChange={(e) => setEditReligion(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-850 focus:border-emerald-500/30 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none"
                   />
                 </div>
 

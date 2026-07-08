@@ -466,6 +466,15 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => {
+                window.history.pushState({}, '', '/admin');
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }}
+              className="px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold rounded transition-colors uppercase tracking-wider cursor-pointer flex items-center gap-1"
+            >
+              <span>Admin Portal</span>
+            </button>
+            <button
               onClick={onNavigateHome}
               className="px-3 py-1 bg-zinc-950 hover:bg-zinc-900 border border-zinc-900 text-zinc-400 hover:text-zinc-200 text-[10px] font-bold rounded transition-colors uppercase tracking-wider cursor-pointer"
             >
@@ -689,8 +698,8 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
 
                       {isEditingComm ? (
                         /* COMMUNITY PARAMETERS FORM */
-                        <div className="mt-4 p-4 bg-black/40 border border-zinc-900 rounded-lg space-y-4 text-xs">
-                          <div className="grid grid-cols-2 gap-3">
+                        <div className="mt-4 p-4 bg-black/40 border border-zinc-900 rounded-lg space-y-4 text-xs overflow-y-auto max-h-[50vh] scrollbar-thin">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                               <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1">Community Name</label>
                               <input
@@ -721,7 +730,7 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
                             />
                           </div>
 
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                               <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1">Logo image url</label>
                               <input
@@ -742,7 +751,7 @@ export const AdminCommunities: React.FC<AdminCommunitiesProps> = ({ onNavigateHo
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-3 pt-1">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                             <div>
                               <label className="block text-[8px] uppercase text-zinc-600 font-bold mb-1">Member Posting Policy</label>
                               <button

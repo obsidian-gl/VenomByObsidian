@@ -584,6 +584,7 @@ Use it now: https://myvenom.vercel.app`;
   };
 
   const handleReact = async (reactionKey: string) => {
+    setShowMobileReactions(false);
     if (isBlocked) {
       if (onBlockedActionTriggered) onBlockedActionTriggered();
       return;
@@ -942,11 +943,47 @@ Use it now: https://myvenom.vercel.app`;
         )}
       </div>
 
+      {/* Scrollable Mobile Reaction Bar (opens with smooth height and fade animation on mobile) */}
+      <AnimatePresence>
+        {showMobileReactions && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2, ease: 'easeInOut' }}
+            className="overflow-hidden flex justify-center w-full sm:hidden bg-zinc-950/20 border-t border-zinc-900/40"
+          >
+            <div className="py-2 px-3 flex justify-center w-full">
+              <div className="bg-zinc-900 border border-zinc-800 rounded-full py-1 px-2.5 flex items-center justify-between gap-1 shadow-xl w-full max-w-[280px]">
+                {REACTIONS.map((r) => {
+                  const count = post.reactions?.[r.key] || 0;
+                  const isUserReacted = activeReaction === r.key;
+                  return (
+                    <button
+                      key={r.key}
+                      onClick={() => handleReact(r.key)}
+                      className={`flex items-center gap-0.5 px-2 py-1 rounded-full transition-all duration-200 text-xs cursor-pointer active:scale-90 shrink-0 ${
+                        isUserReacted
+                          ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold'
+                          : 'bg-transparent border border-transparent text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      <span className="text-sm shrink-0">{r.emoji}</span>
+                      {count > 0 && <span className="font-mono text-[9px] font-medium opacity-80">{formatShortCount(count)}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Footer Interactive Actions */}
-      <div className="px-3 py-2 border-t border-zinc-900/60 bg-zinc-950 grid grid-cols-3 items-center text-zinc-500 font-mono gap-1 sm:gap-2">
+      <div className="px-3 py-2 border-t border-zinc-900/60 bg-zinc-950 flex justify-between items-center text-zinc-500 font-mono gap-1 sm:gap-2">
         
-        {/* Left Side: Likes & Comments */}
-        <div className="flex items-center gap-1.5 sm:gap-2 justify-start">
+        {/* Left Side: Likes, Comments & Mobile React Button */}
+        <div className="flex items-center gap-1 sm:gap-1.5 justify-start">
           {/* Likes Button */}
           <button
             onClick={handleLikeToggle}
@@ -979,10 +1016,43 @@ Use it now: https://myvenom.vercel.app`;
             <MessageSquare className="w-3.5 h-3.5" />
             <span className="text-[10px]">{formatShortCount(commentsCount)}</span>
           </button>
+
+          {/* Mobile Screen: Minimalist React button beside Comment button */}
+          <button
+            onClick={() => {
+              const nextVal = !showMobileReactions;
+              setShowMobileReactions(nextVal);
+              if (nextVal) {
+                setTimeout(() => {
+                  const element = document.getElementById(`post-${post.id}`);
+                  if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                  }
+                }, 150);
+              }
+            }}
+            className={`flex sm:hidden items-center gap-1 px-2 py-1 hover:bg-zinc-900/60 rounded text-[10px] transition-colors cursor-pointer ${
+              activeReaction ? 'text-emerald-400 font-semibold' : 'hover:text-emerald-400'
+            }`}
+            title="React to post"
+          >
+            {activeReaction ? (
+              <span className="text-sm shrink-0">
+                {REACTIONS.find((r) => r.key === activeReaction)?.emoji}
+              </span>
+            ) : (
+              <Smile className="w-3.5 h-3.5 text-zinc-500 hover:text-emerald-400" />
+            )}
+            {Object.values(post.reactions || {}).reduce((a, b) => a + b, 0) > 0 && (
+              <span className="text-[9px] text-zinc-400 ml-0.5">
+                {formatShortCount(Object.values(post.reactions || {}).reduce((a, b) => a + b, 0))}
+              </span>
+            )}
+          </button>
         </div>
 
-        {/* Center Side: Reaction Bar (All 6 emojis fitted elegantly without scrolling) */}
-        <div className="flex justify-center items-center">
+        {/* Center Side: Static Reaction Bar (All 6 emojis on desktop, hidden on mobile) */}
+        <div className="hidden sm:flex justify-center items-center flex-1">
           <div className="flex items-center gap-0.5 sm:gap-1 bg-zinc-900/40 border border-zinc-850/60 rounded-full p-0.5 px-1 sm:px-1.5 shadow-inner">
             {REACTIONS.map((r) => {
               const count = post.reactions?.[r.key] || 0;
