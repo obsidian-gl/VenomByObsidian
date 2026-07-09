@@ -27,15 +27,13 @@ async function getRequestBody(req: any): Promise<any> {
 }
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
-  // Set CORS headers
-  res.writeHead(200, {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Accept'
-  });
+  // Set CORS headers safely
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
 
   if (req.method === 'OPTIONS') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end();
     return;
   }
@@ -64,6 +62,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const subDocRef = db.doc(`pushSubscriptions/${endpointHash}`);
     await subDocRef.delete();
 
+    res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, message: 'Subscription removed successfully.' }));
   } catch (err: any) {
     console.error('API /api/push-unsubscribe failed:', err);

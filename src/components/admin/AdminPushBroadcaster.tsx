@@ -81,15 +81,18 @@ export const AdminPushBroadcaster: React.FC = () => {
     setIsLoadingHistory(true);
     try {
       const q = query(
-        collection(db, 'notificationHistory'),
-        orderBy('sentAt', 'desc'),
-        limit(10)
+        collection(db, 'posts'),
+        orderBy('createdAt', 'desc'),
+        limit(100)
       );
       const snap = await getDocs(q);
-      const items = snap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      const items = snap.docs
+        .filter(doc => doc.id.startsWith('notificationHistory_'))
+        .map(doc => ({
+          id: doc.id.replace('notificationHistory_', ''),
+          ...doc.data()
+        }))
+        .slice(0, 10);
       setHistoryLogs(items);
     } catch (err: any) {
       console.error('Failed to retrieve notification logs:', err);

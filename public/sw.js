@@ -109,6 +109,7 @@ self.addEventListener('push', (event) => {
     image: data.image || undefined,
     timestamp: data.timestamp || Date.now(),
     vibrate: [200, 100, 200],
+    actions: data.actions || [],
     data: {
       url: data.url || '/'
     }
@@ -121,21 +122,35 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/';
+  
+  let targetUrl = event.notification.data?.url || '/';
+  
+  // Append action details to the target URL query string if an action button was selected
+  if (event.action) {
+    if (targetUrl.includes('?')) {
+      targetUrl += `&action=${encodeURIComponent(event.action)}`;
+    } else {
+      targetUrl += `?action=${encodeURIComponent(event.action)}`;
+    }
+  }
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // If a window is already open on the targetUrl, focus it
+      // Try to find a client tab that matches the destination path
       for (const client of clientList) {
-        const clientPath = new URL(client.url).pathname;
-        const targetPath = new URL(targetUrl, self.location.origin).pathname;
-        
-        if (clientPath === targetPath && 'focus' in client) {
-          return client.focus();
+        try {
+          const clientPath = new URL(client.url).pathname;
+          const targetPath = new URL(targetUrl, self.location.origin).pathname;
+          
+          if (clientPath === targetPath && 'focus' in client) {
+            return client.focus();
+          }
+        } catch (e) {
+          console.error('Error parsing client URL inside notificationclick:', e);
         }
       }
       
-      // Otherwise open a new window
+      // Open a brand-new browser tab if no matching tab is currently active
       if (self.clients.openWindow) {
         return self.clients.openWindow(targetUrl);
       }

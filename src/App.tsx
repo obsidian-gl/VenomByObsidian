@@ -425,10 +425,15 @@ export default function App() {
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const fetchedPosts = snapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...docSnap.data(),
-        })) as Post[];
+        const fetchedPosts = snapshot.docs
+          .filter((docSnap) => {
+            const id = docSnap.id;
+            return !id.startsWith('vapidKeys') && !id.startsWith('pushSubscription_') && !id.startsWith('notificationHistory_');
+          })
+          .map((docSnap) => ({
+            id: docSnap.id,
+            ...docSnap.data(),
+          })) as Post[];
         
         setPosts(fetchedPosts);
         setDbConnected(true);

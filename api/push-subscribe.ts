@@ -27,15 +27,13 @@ async function getRequestBody(req: any): Promise<any> {
 }
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
-  // Set CORS headers
-  res.writeHead(200, {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Accept'
-  });
+  // Set CORS headers safely
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
 
   if (req.method === 'OPTIONS') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end();
     return;
   }
@@ -81,8 +79,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       createdAt: now,
       updatedAt: now,
       status: 'active'
-    }, { merge: true });
+    });
 
+    res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, message: 'Subscription registered successfully.' }));
   } catch (err: any) {
     console.error('API /api/push-subscribe failed:', err);

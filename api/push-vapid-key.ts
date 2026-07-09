@@ -7,22 +7,22 @@ import { IncomingMessage, ServerResponse } from 'http';
 import { getVapidKeys } from './_vapid';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
+  // Set CORS and caching headers safely
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end();
+    return;
+  }
+
   try {
-    res.writeHead(200, {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Accept',
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache'
-    });
-
-    if (req.method === 'OPTIONS') {
-      res.end();
-      return;
-    }
-
     const keys = await getVapidKeys();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ publicKey: keys.publicKey }));
   } catch (err: any) {
     console.error('API /api/push-vapid-key failed:', err);

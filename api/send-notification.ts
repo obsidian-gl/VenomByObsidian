@@ -29,15 +29,13 @@ async function getRequestBody(req: any): Promise<any> {
 }
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
-  // Set CORS headers
-  res.writeHead(200, {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Accept'
-  });
+  // Set CORS headers safely
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
 
   if (req.method === 'OPTIONS') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end();
     return;
   }
@@ -72,6 +70,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const subSnap = await subCollectionRef.get();
 
     if (subSnap.empty) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         success: true,
         sentCount: 0,
@@ -90,6 +89,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       badge: badge || 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
       image: image || '',
       url: url || '/',
+      actions: body.actions || [],
       timestamp: Date.now()
     });
 
@@ -138,6 +138,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         badge: badge || 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
         image: image || '',
         url: url || '/',
+        actions: body.actions || [],
         sentCount: successCount,
         failedCount: failureCount,
         executionTimeMs,
@@ -147,6 +148,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       });
     }
 
+    res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
       sentCount: successCount,
