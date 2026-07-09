@@ -4,7 +4,7 @@
  */
 
 import { IncomingMessage, ServerResponse } from 'http';
-import { db } from './_firebase-admin';
+import { db } from './_firebase-admin.js';
 
 async function getRequestBody(req: any): Promise<any> {
   if (req.body) return req.body;

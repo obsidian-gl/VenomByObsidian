@@ -4,9 +4,9 @@
  */
 
 import { IncomingMessage, ServerResponse } from 'http';
-import { db } from './_firebase-admin';
+import { db } from './_firebase-admin.js';
 import webPush from 'web-push';
-import { getVapidKeys } from './_vapid';
+import { getVapidKeys } from './_vapid.js';
 
 async function getRequestBody(req: any): Promise<any> {
   if (req.body) return req.body;
@@ -96,11 +96,14 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     let successCount = 0;
     let failureCount = 0;
 
-    const promises = subSnap.docs.map(async (subDoc) => {
+    const promises = subSnap.docs.map(async (subDoc: any) => {
       const subData = subDoc.data();
       const subscription = subData.subscription || {
         endpoint: subData.endpoint,
-        keys: subData.keys || {}
+        keys: {
+          p256dh: subData.p256dh,
+          auth: subData.auth
+        }
       };
 
       if (subscription && subscription.endpoint) {
@@ -117,7 +120,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           failureCount++;
           // Prune / clean up expired or defunct subscriptions immediately (HTTP status 410 Gone or 404 Not Found)
           if (err.statusCode === 410 || err.statusCode === 404) {
-            await db.doc(`pushSubscriptions/${subDoc.id}`).delete().catch((delErr) => {
+            await db.doc(`pushSubscriptions/${subDoc.id}`).delete().catch((delErr: any) => {
               console.error(`Failed to auto-prune subscription doc ${subDoc.id}:`, delErr);
             });
           }
@@ -143,7 +146,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         failedCount: failureCount,
         executionTimeMs,
         sentAt: new Date().toISOString()
-      }).catch((histErr) => {
+      }).catch((histErr: any) => {
         console.error('Failed to log notification history to Firestore:', histErr);
       });
     }

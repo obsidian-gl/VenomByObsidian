@@ -4,7 +4,7 @@
  */
 
 import { IncomingMessage, ServerResponse } from 'http';
-import { getVapidKeys } from './_vapid';
+import { getVapidKeys } from './_vapid.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   // Set CORS and caching headers safely

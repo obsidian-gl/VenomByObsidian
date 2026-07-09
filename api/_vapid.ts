@@ -3,58 +3,34 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import webPush from 'web-push';
-import { db } from './_firebase-admin';
+import dotenv from 'dotenv';
+dotenv.config();
 
-let vapidKeys: { publicKey: string; privateKey: string } | null = null;
+import webPush from 'web-push';
+
+let vapidKeys: { publicKey: string; privateKey: string; subject: string } | null = null;
 
 export async function getVapidKeys() {
   if (vapidKeys) return vapidKeys;
-  
-  try {
-    const keyDocRef = db.doc('system/vapidKeys');
-    const keyDoc = await keyDocRef.get();
-    
-    if (keyDoc.exists) {
-      const data = keyDoc.data();
-      if (data && data.publicKey && data.privateKey) {
-        vapidKeys = {
-          publicKey: data.publicKey,
-          privateKey: data.privateKey
-        };
-        webPush.setVapidDetails(
-          'mailto:work.tilakpopatfilms@gmail.com',
-          vapidKeys.publicKey,
-          vapidKeys.privateKey
-        );
-        return vapidKeys;
-      }
-    }
-    
-    // Generate fresh VAPID keys if they don't exist
-    const generated = webPush.generateVAPIDKeys();
-    await keyDocRef.set({
-      publicKey: generated.publicKey,
-      privateKey: generated.privateKey,
-      updatedAt: new Date().toISOString()
-    });
-    
-    vapidKeys = generated;
-    webPush.setVapidDetails(
-      'mailto:work.tilakpopatfilms@gmail.com',
-      vapidKeys.publicKey,
-      vapidKeys.privateKey
-    );
+
+  const publicKey = process.env.VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  const subject = process.env.VAPID_SUBJECT || 'mailto:work.tilakpopatfilms@gmail.com';
+
+  if (publicKey && privateKey) {
+    vapidKeys = { publicKey, privateKey, subject };
+    webPush.setVapidDetails(subject, publicKey, privateKey);
     return vapidKeys;
-  } catch (err: any) {
-    console.error('Error fetching or generating VAPID keys from Admin Firestore:', err);
-    // Dynamic fallback key generation to prevent crashing the serverless container
-    const generated = webPush.generateVAPIDKeys();
-    webPush.setVapidDetails(
-      'mailto:work.tilakpopatfilms@gmail.com',
-      generated.publicKey,
-      generated.privateKey
-    );
-    return generated;
   }
+
+  // Fallback to dynamic key generation to prevent serverless function failure
+  console.warn('VAPID_PUBLIC_KEY or VAPID_PRIVATE_KEY environment variable is not configured. Generating on the fly.');
+  const generated = webPush.generateVAPIDKeys();
+  vapidKeys = {
+    publicKey: generated.publicKey,
+    privateKey: generated.privateKey,
+    subject
+  };
+  webPush.setVapidDetails(subject, generated.publicKey, generated.privateKey);
+  return vapidKeys;
 }
