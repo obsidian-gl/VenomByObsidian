@@ -13,7 +13,14 @@ export const PushNotificationPrompt: React.FC = () => {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
 
-  const isIframe = typeof window !== 'undefined' && window.self !== window.top;
+  const isIframe = (() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.self !== window.top;
+    } catch (e) {
+      return true; // Security error guarantees we are in a cross-origin iframe
+    }
+  })();
 
   const handleOpenNewTab = () => {
     window.open(window.location.href, '_blank');
