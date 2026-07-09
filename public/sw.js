@@ -104,8 +104,10 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: data.icon || 'https://img.icons8.com/nolan/256/shield.png',
-    badge: data.badge || 'https://img.icons8.com/nolan/256/shield.png',
+    icon: data.icon || 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
+    badge: data.badge || 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
+    image: data.image || undefined,
+    timestamp: data.timestamp || Date.now(),
     vibrate: [200, 100, 200],
     data: {
       url: data.url || '/'

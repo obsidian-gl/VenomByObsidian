@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bell, BellOff, X, Check, Loader2, AlertCircle, ExternalLink } from 'lucide-react';
+import { Bell, X, Check, Loader2, AlertCircle, ExternalLink, Settings } from 'lucide-react';
 import { getPushSubscriptionState, subscribeUserToPush } from '../utils/push';
 
 export const PushNotificationPrompt: React.FC = () => {
@@ -31,14 +31,15 @@ export const PushNotificationPrompt: React.FC = () => {
     const checkStatus = async () => {
       try {
         const state = await getPushSubscriptionState();
-        if (state === 'prompt') {
-          // Delay display slightly for a calmer user experience (3 seconds)
+        // If state is prompt or denied, show the prompt to the user
+        if (state === 'prompt' || state === 'denied') {
+          // Delay display slightly for a calmer user experience (1.5 seconds)
           const timer = setTimeout(() => {
             const hasDismissed = sessionStorage.getItem('venom_push_dismissed');
             if (!hasDismissed) {
               setIsVisible(true);
             }
-          }, 3000);
+          }, 1500);
           return () => clearTimeout(timer);
         }
       } catch (e) {
@@ -53,6 +54,13 @@ export const PushNotificationPrompt: React.FC = () => {
     setErrorMessage('');
     
     try {
+      // Check permission state first
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'denied') {
+        setStatus('error');
+        setErrorMessage('blocked');
+        return;
+      }
+
       const result = await subscribeUserToPush();
       if (result.success) {
         setStatus('success');
@@ -61,7 +69,11 @@ export const PushNotificationPrompt: React.FC = () => {
         }, 2000);
       } else {
         setStatus('error');
-        setErrorMessage(result.error || 'Permission denied or network failed.');
+        if (result.error?.includes('denied') || result.error?.includes('permission')) {
+          setErrorMessage('blocked');
+        } else {
+          setErrorMessage(result.error || 'Permission denied or network failed.');
+        }
       }
     } catch (err: any) {
       setStatus('error');
@@ -71,6 +83,8 @@ export const PushNotificationPrompt: React.FC = () => {
 
   const handleDismiss = () => {
     setIsVisible(false);
+    // Keep dismissed state in sessionStorage so we don't spam them in the current visit,
+    // but on next load (revisit) it will ask again!
     sessionStorage.setItem('venom_push_dismissed', 'true');
   };
 
@@ -191,9 +205,23 @@ export const PushNotificationPrompt: React.FC = () => {
                     Connection Protocol Failed
                   </h4>
                 </div>
-                <p className="text-[10px] text-zinc-400 font-sans leading-relaxed">
-                  {errorMessage || 'Your browser blocks notification permissions or is running inside an isolated sandbox. Please check browser permissions.'}
-                </p>
+                
+                {errorMessage === 'blocked' ? (
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-zinc-400 font-sans leading-relaxed">
+                      Notification permissions are currently **denied/blocked** by your browser settings. To receive secure Venom dispatches, please click the site settings icon (lock/options) in your address bar and change Notifications permission to **Allow**.
+                    </p>
+                    <div className="flex items-center gap-1.5 text-[9px] text-zinc-500 uppercase bg-zinc-900/50 p-2 rounded border border-zinc-900">
+                      <Settings className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                      <span>Configure: Site Settings &rarr; Notifications &rarr; Allow</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-zinc-400 font-sans leading-relaxed">
+                    {errorMessage || 'Your browser blocks notification permissions or is running inside an isolated sandbox. Please check browser permissions.'}
+                  </p>
+                )}
+
                 <div className="flex gap-2">
                   <button
                     onClick={handleSubscribe}

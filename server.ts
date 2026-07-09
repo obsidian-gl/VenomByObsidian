@@ -169,7 +169,7 @@ async function startServer() {
 
   // Save/Register push subscription
   app.post('/api/push-subscribe', async (req, res) => {
-    const { subscription, deviceImei } = req.body;
+    const { subscription, browser, device, deviceImei } = req.body;
     if (!subscription || !subscription.endpoint) {
       return res.status(400).json({ error: 'Subscription data with endpoint is required.' });
     }
@@ -180,9 +180,13 @@ async function startServer() {
       const subDocRef = doc(db, 'pushSubscriptions', endpointHash);
 
       await setDoc(subDocRef, {
-        subscription,
+        endpoint: subscription.endpoint,
+        keys: subscription.keys || {},
+        browser: browser || 'Unknown',
+        device: device || 'Unknown',
         deviceImei: deviceImei || 'WEB-USER',
-        subscribedAt: new Date().toISOString()
+        subscription: subscription,
+        createdAt: new Date().toISOString()
       });
 
       res.status(201).json({ success: true, message: 'Subscription successfully registered.' });
@@ -192,7 +196,25 @@ async function startServer() {
     }
   });
 
-  // Broadcast push notifications to all registered devices
+  // Remove/Unsubscribe push subscription
+  app.post('/api/push-unsubscribe', async (req, res) => {
+    const { endpoint } = req.body;
+    if (!endpoint) {
+      return res.status(400).json({ error: 'Subscription endpoint is required.' });
+    }
+
+    try {
+      const endpointHash = Buffer.from(endpoint).toString('base64url');
+      const subDocRef = doc(db, 'pushSubscriptions', endpointHash);
+      await deleteDoc(subDocRef);
+      res.json({ success: true, message: 'Subscription successfully removed.' });
+    } catch (err: any) {
+      console.error('Failed to unsubscribe:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Broadcast push notifications to all registered devices (Legacy helper)
   app.post('/api/push-send', async (req, res) => {
     const { title, body, url } = req.body;
     if (!title || !body) {
@@ -200,9 +222,7 @@ async function startServer() {
     }
 
     try {
-      // Initialize web-push config
       await getVapidKeys();
-
       const subCollectionRef = collection(db, 'pushSubscriptions');
       const subSnap = await getDocs(subCollectionRef);
 
@@ -215,7 +235,9 @@ async function startServer() {
         body,
         url: url || '/',
         icon: 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
-        badge: 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png'
+        badge: 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
+        image: '',
+        timestamp: Date.now()
       });
 
       let successCount = 0;
@@ -223,14 +245,17 @@ async function startServer() {
 
       const promises = subSnap.docs.map(async (subDoc) => {
         const subData = subDoc.data();
-        if (subData && subData.subscription) {
+        const subscription = subData.subscription || {
+          endpoint: subData.endpoint,
+          keys: subData.keys || {}
+        };
+        if (subscription && subscription.endpoint) {
           try {
-            await webPush.sendNotification(subData.subscription, payload);
+            await webPush.sendNotification(subscription, payload);
             successCount++;
           } catch (err: any) {
             console.error(`Failed to send notification to doc ${subDoc.id}:`, err.message);
             failureCount++;
-            // Automatically clean up expired (statusCode 410 / 404) subscriptions
             if (err.statusCode === 410 || err.statusCode === 404) {
               await deleteDoc(doc(db, 'pushSubscriptions', subDoc.id)).catch(() => {});
             }
@@ -245,6 +270,77 @@ async function startServer() {
         sentCount: successCount,
         failedCount: failureCount,
         message: `Successfully broadcasted to ${successCount} devices, pruned ${failureCount} obsolete registration(s).`
+      });
+    } catch (err: any) {
+      console.error('Failed to broadcast push notification:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Broadcast push notifications to all registered devices (Standard payload with Icon, Badge, Image, URL)
+  app.post('/api/send-notification', async (req, res) => {
+    const { title, message, body: alternativeBody, icon, badge, image, url } = req.body;
+    const messageContent = message || alternativeBody;
+
+    if (!title || !messageContent) {
+      return res.status(400).json({ error: 'Title and message/body are required.' });
+    }
+
+    try {
+      await getVapidKeys();
+      const subCollectionRef = collection(db, 'pushSubscriptions');
+      const subSnap = await getDocs(subCollectionRef);
+
+      if (subSnap.empty) {
+        return res.json({
+          success: true,
+          sentCount: 0,
+          failedCount: 0,
+          message: 'No active devices have registered for push notifications.'
+        });
+      }
+
+      const payload = JSON.stringify({
+        title,
+        body: messageContent,
+        icon: icon || 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
+        badge: badge || 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
+        image: image || '',
+        url: url || '/',
+        timestamp: Date.now()
+      });
+
+      let successCount = 0;
+      let failureCount = 0;
+
+      const promises = subSnap.docs.map(async (subDoc) => {
+        const subData = subDoc.data();
+        const subscription = subData.subscription || {
+          endpoint: subData.endpoint,
+          keys: subData.keys || {}
+        };
+
+        if (subscription && subscription.endpoint) {
+          try {
+            await webPush.sendNotification(subscription, payload);
+            successCount++;
+          } catch (err: any) {
+            console.error(`Failed to send notification to doc ${subDoc.id}:`, err.message);
+            failureCount++;
+            if (err.statusCode === 410 || err.statusCode === 404) {
+              await deleteDoc(doc(db, 'pushSubscriptions', subDoc.id)).catch(() => {});
+            }
+          }
+        }
+      });
+
+      await Promise.all(promises);
+
+      res.json({
+        success: true,
+        sentCount: successCount,
+        failedCount: failureCount,
+        message: `Delivered message to ${successCount} active receiver(s) successfully. Pruned ${failureCount} defunct registration(s).`
       });
     } catch (err: any) {
       console.error('Failed to broadcast push notification:', err);

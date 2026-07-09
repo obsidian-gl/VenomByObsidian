@@ -18,8 +18,28 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
+export function getBrowserInfo(): string {
+  const ua = navigator.userAgent;
+  if (ua.includes("Firefox")) return "Firefox";
+  if (ua.includes("SamsungBrowser")) return "Samsung Browser";
+  if (ua.includes("Opera") || ua.includes("OPR")) return "Opera";
+  if (ua.includes("Trident")) return "Internet Explorer";
+  if (ua.includes("Edge") || ua.includes("Edg")) return "Edge";
+  if (ua.includes("Chrome")) return "Chrome";
+  if (ua.includes("Safari")) return "Safari";
+  return "Unknown Browser";
+}
+
+export function getDeviceInfo(): string {
+  const ua = navigator.userAgent;
+  if (/tablet|ipad|playbook|silk/i.test(ua)) return "Tablet";
+  if (/Mobile|Android|iP(hone|od)/i.test(ua)) return "Mobile";
+  return "Desktop";
+}
+
 export async function isPushSupported(): Promise<boolean> {
   return (
+    typeof window !== 'undefined' &&
     'serviceWorker' in navigator &&
     'PushManager' in window &&
     'Notification' in window
@@ -31,7 +51,6 @@ export async function getPushSubscriptionState(): Promise<'granted' | 'denied' |
   
   const permission = Notification.permission;
   if (permission === 'granted') {
-    // Check if there is an active subscription
     const registration = await navigator.serviceWorker.ready;
     const subscription = await registration.pushManager.getSubscription();
     return subscription ? 'granted' : 'prompt';
@@ -110,12 +129,18 @@ export async function subscribeUserToPush(): Promise<{ success: boolean; error?:
       applicationServerKey,
     });
 
-    // 5. Send Subscription details to Express Server
+    // Get browser and device info
+    const browser = getBrowserInfo();
+    const device = getDeviceInfo();
+
+    // 5. Send Subscription details to Server
     const saveResponse = await fetch('/api/push-subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        subscription,
+        subscription: subscription.toJSON(),
+        browser,
+        device,
         deviceImei: localStorage.getItem('venom_device_imei') || 'WEB-USER',
       }),
     });
@@ -140,7 +165,16 @@ export async function unsubscribeUserFromPush(): Promise<boolean> {
     const subscription = await registration.pushManager.getSubscription();
     
     if (subscription) {
+      const endpoint = subscription.endpoint;
       await subscription.unsubscribe();
+      
+      // Notify backend to remove from Firestore
+      await fetch('/api/push-unsubscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint })
+      }).catch(err => console.warn('Failed to unsubscribe on backend:', err));
+      
       return true;
     }
     return false;

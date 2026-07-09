@@ -9,6 +9,9 @@ import { Radio, Send, Loader2, CheckCircle2, AlertTriangle, RefreshCw } from 'lu
 export const AdminPushBroadcaster: React.FC = () => {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [icon, setIcon] = useState('https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png');
+  const [badge, setBadge] = useState('https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png');
+  const [image, setImage] = useState('');
   const [url, setUrl] = useState('/');
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [stats, setStats] = useState<{ sentCount: number; failedCount: number; message: string } | null>(null);
@@ -23,14 +26,17 @@ export const AdminPushBroadcaster: React.FC = () => {
     setStats(null);
 
     try {
-      const response = await fetch('/api/push-send', {
+      const response = await fetch('/api/send-notification', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           title,
-          body,
+          message: body,
+          icon,
+          badge,
+          image,
           url,
         }),
       });
@@ -43,9 +49,10 @@ export const AdminPushBroadcaster: React.FC = () => {
           failedCount: data.failedCount || 0,
           message: data.message || 'Broadcast completed successfully.',
         });
-        // Clear form fields
+        // Clear dynamic inputs but keep defaults for icon/badge
         setTitle('');
         setBody('');
+        setImage('');
         setUrl('/');
       } else {
         setStatus('error');
@@ -174,7 +181,7 @@ export const AdminPushBroadcaster: React.FC = () => {
           {/* Body Field */}
           <div className="space-y-1.5">
             <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">
-              Message content / body
+              Message Content / Body
             </label>
             <textarea
               value={body}
@@ -186,10 +193,52 @@ export const AdminPushBroadcaster: React.FC = () => {
             />
           </div>
 
+          {/* Icon Field */}
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">
+              Notification Icon URL
+            </label>
+            <input
+              type="text"
+              value={icon}
+              onChange={(e) => setIcon(e.target.value)}
+              placeholder="e.g. https://example.com/icon.png"
+              className="w-full px-3 py-2 text-xs bg-zinc-950 border border-zinc-900 rounded focus:outline-none focus:border-emerald-500/40 text-zinc-200"
+            />
+          </div>
+
+          {/* Badge Field */}
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">
+              Notification Badge URL
+            </label>
+            <input
+              type="text"
+              value={badge}
+              onChange={(e) => setBadge(e.target.value)}
+              placeholder="e.g. https://example.com/badge.png"
+              className="w-full px-3 py-2 text-xs bg-zinc-950 border border-zinc-900 rounded focus:outline-none focus:border-emerald-500/40 text-zinc-200"
+            />
+          </div>
+
+          {/* Image Field */}
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">
+              Notification Big Image URL (Optional)
+            </label>
+            <input
+              type="text"
+              value={image}
+              onChange={(e) => setImage(e.target.value)}
+              placeholder="e.g. https://example.com/banner.png"
+              className="w-full px-3 py-2 text-xs bg-zinc-950 border border-zinc-900 rounded focus:outline-none focus:border-emerald-500/40 text-zinc-200"
+            />
+          </div>
+
           {/* URL Route Field */}
           <div className="space-y-1.5">
             <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">
-              Redirection route / action url
+              Redirection Route / Action URL
             </label>
             <input
               type="text"
