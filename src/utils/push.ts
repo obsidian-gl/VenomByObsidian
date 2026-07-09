@@ -95,7 +95,29 @@ export async function subscribeUserToPush(): Promise<{ success: boolean; error?:
     if (!contentType || !contentType.includes('application/json')) {
       const text = await response.text();
       console.error('Server returned non-JSON response:', text);
-      throw new Error('Received unexpected non-JSON gateway protocol. Please retry.');
+      
+      // Poisoned service worker cache fallback recovery sequence
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const reg of registrations) {
+          await reg.unregister();
+        }
+        if ('caches' in window) {
+          const cacheKeys = await window.caches.keys();
+          for (const key of cacheKeys) {
+            await window.caches.delete(key);
+          }
+        }
+      } catch (cleanErr) {
+        console.warn('Fallback cleanup failed:', cleanErr);
+      }
+      
+      // Trigger a clean reload to purge the active service worker controller completely
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+
+      throw new Error('Detected cached gateway layers. Purging network cache and restarting application protocols...');
     }
 
     const { publicKey } = await response.json();
