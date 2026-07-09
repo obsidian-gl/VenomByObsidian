@@ -8,15 +8,28 @@ import { initializeFirestore, doc, getDocFromServer, setLogLevel } from 'firebas
 import { getAuth, signInAnonymously } from 'firebase/auth';
 import firebaseConfig from '../firebase-applet-config.json';
 
-let app;
+let app: any;
 let db: any;
 let auth: any;
 
 try {
-  app = initializeApp(firebaseConfig);
+  const apiKey = import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey;
+  const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfig.projectId || 'venom-notifications';
+  const appId = import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfig.appId;
+
+  const config = {
+    apiKey: apiKey || undefined,
+    projectId,
+    appId: appId || undefined,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig.authDomain || `${projectId}.firebaseapp.com`,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfig.storageBucket || `${projectId}.firebasestorage.app`,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfig.messagingSenderId || undefined,
+  };
+
+  app = initializeApp(config);
   db = initializeFirestore(app, {
     ignoreUndefinedProperties: true
-  }, firebaseConfig.firestoreDatabaseId);
+  });
   setLogLevel('error');
   auth = getAuth(app);
   
@@ -25,7 +38,7 @@ try {
     console.warn("Anonymous authentication check:", error.message);
   });
 } catch (error) {
-  console.error("Failed to initialize Firebase", error);
+  console.error("Failed to initialize Firebase client SDK:", error);
 }
 
 export { app, db, auth };
