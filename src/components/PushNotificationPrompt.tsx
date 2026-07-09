@@ -5,13 +5,19 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bell, BellOff, X, Check, Loader2, AlertCircle } from 'lucide-react';
+import { Bell, BellOff, X, Check, Loader2, AlertCircle, ExternalLink } from 'lucide-react';
 import { getPushSubscriptionState, subscribeUserToPush } from '../utils/push';
 
 export const PushNotificationPrompt: React.FC = () => {
   const [isVisible, setIsVisible] = useState(false);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
+
+  const isIframe = typeof window !== 'undefined' && window.self !== window.top;
+
+  const handleOpenNewTab = () => {
+    window.open(window.location.href, '_blank');
+  };
 
   useEffect(() => {
     // Check if the user is already subscribed or if notifications are blocked
@@ -94,26 +100,41 @@ export const PushNotificationPrompt: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest block leading-none">
-                      Dispatch Receiver
+                      {isIframe ? 'Iframe Sandbox Mode' : 'Dispatch Receiver'}
                     </span>
                     <h4 className="text-xs font-black text-zinc-100 uppercase tracking-wider mt-1">
-                      Stay Live & Standby
+                      {isIframe ? 'Open Standalone Tab' : 'Stay Live & Standby'}
                     </h4>
                   </div>
                 </div>
 
                 <p className="text-[11px] leading-relaxed font-sans text-zinc-400">
-                  Enable secure push notifications to receive real-time dispatches, group community activity, and network notifications even when browser tabs are closed.
+                  {isIframe ? (
+                    'Browser sandbox policies prevent service worker registration and push key authorizations inside preview frames. Open this app in a standalone browser tab to safely enable real-time notifications.'
+                  ) : (
+                    'Enable secure push notifications to receive real-time dispatches, group community activity, and network notifications even when browser tabs are closed.'
+                  )}
                 </p>
 
                 <div className="flex gap-2 pt-1">
-                  <button
-                    onClick={handleSubscribe}
-                    className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-[10px] font-black uppercase tracking-wider rounded transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/30"
-                    id="push-allow-btn"
-                  >
-                    <span>Enable Notifications</span>
-                  </button>
+                  {isIframe ? (
+                    <button
+                      onClick={handleOpenNewTab}
+                      className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-[10px] font-black uppercase tracking-wider rounded transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/30"
+                      id="push-open-tab-btn"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Open in New Tab</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleSubscribe}
+                      className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-[10px] font-black uppercase tracking-wider rounded transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/30"
+                      id="push-allow-btn"
+                    >
+                      <span>Enable Notifications</span>
+                    </button>
+                  )}
                   <button
                     onClick={handleDismiss}
                     className="px-3.5 py-2 border border-zinc-850 hover:border-zinc-750 text-zinc-400 hover:text-zinc-200 text-[10px] font-black uppercase tracking-wider rounded transition-colors cursor-pointer"

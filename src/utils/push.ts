@@ -48,39 +48,32 @@ export async function subscribeUserToPush(): Promise<{ success: boolean; error?:
       return { success: false, error: 'Push notifications are not supported by this browser.' };
     }
 
+    // Fast-fail if running inside the iframe preview sandbox
+    const isIframe = typeof window !== 'undefined' && window.self !== window.top;
+    if (isIframe) {
+      return { 
+        success: false, 
+        error: 'Authorization sandbox block. Please click the "Open in New Tab" button to configure secure notification dispatches.' 
+      };
+    }
+
     // 1. Request Browser Permission
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
       return { success: false, error: 'Notification permission was denied.' };
     }
 
-    // 2. Unregister any old service workers & clear caches to purge poisoned assets
-    try {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      for (const reg of registrations) {
-        await reg.unregister();
-        console.log('Unregistered active service worker instance');
-      }
-      
-      if ('caches' in window) {
-        const cacheKeys = await window.caches.keys();
-        for (const key of cacheKeys) {
-          await window.caches.delete(key);
-        }
-        console.log('Purged all browser cache storage items');
-      }
-    } catch (cleanErr) {
-      console.warn('Failed cleaning cache/SW registers:', cleanErr);
+    // 2. Register or retrieve active Service Worker
+    let registration = await navigator.serviceWorker.getRegistration();
+    if (!registration) {
+      registration = await navigator.serviceWorker.register('/sw.js');
     }
-
-    // 3. Register the new fresh Service Worker with the bypass /api/ rule
-    const registration = await navigator.serviceWorker.register('/sw.js');
     await registration.update().catch(() => {});
     const activeRegistration = await navigator.serviceWorker.ready;
 
-    // 4. Fetch VAPID Public Key from Server via POST (completely bypasses service worker interception)
+    // 3. Fetch VAPID Public Key from Server (GET with cache-busting timestamp query parameter)
     const response = await fetch(`/api/push-vapid-key?t=${Date.now()}`, {
-      method: 'POST',
+      method: 'GET',
       headers: {
         'Accept': 'application/json',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -88,37 +81,18 @@ export async function subscribeUserToPush(): Promise<{ success: boolean; error?:
       }
     });
     
+    // Check for proxy/gateway auth flow redirects (e.g. __cookie_check.html)
+    if (response.redirected) {
+      throw new Error('Sandbox security redirect detected. Please use a standalone browser tab to authenticate and register.');
+    }
+
     if (!response.ok) {
       throw new Error(`Failed to retrieve network security keys: ${response.statusText}`);
     }
     
     const contentType = response.headers.get('content-type');
     if (!contentType || !contentType.includes('application/json')) {
-      const text = await response.text();
-      console.error('Server returned non-JSON response:', text);
-      
-      // Poisoned service worker cache fallback recovery sequence
-      try {
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        for (const reg of registrations) {
-          await reg.unregister();
-        }
-        if ('caches' in window) {
-          const cacheKeys = await window.caches.keys();
-          for (const key of cacheKeys) {
-            await window.caches.delete(key);
-          }
-        }
-      } catch (cleanErr) {
-        console.warn('Fallback cleanup failed:', cleanErr);
-      }
-      
-      // Trigger a clean reload to purge the active service worker controller completely
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
-
-      throw new Error('Detected cached gateway layers. Purging network cache and restarting application protocols...');
+      throw new Error('Unexpected authorization check or cached page returned. Please use a standalone browser tab.');
     }
 
     const { publicKey } = await response.json();
@@ -126,14 +100,14 @@ export async function subscribeUserToPush(): Promise<{ success: boolean; error?:
       throw new Error('Server returned empty security key.');
     }
 
-    // 5. Subscribe with Push Manager
+    // 4. Subscribe with Push Manager
     const applicationServerKey = urlBase64ToUint8Array(publicKey);
     const subscription = await activeRegistration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey,
     });
 
-    // 6. Send Subscription details to Express Server
+    // 5. Send Subscription details to Express Server
     const saveResponse = await fetch('/api/push-subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
