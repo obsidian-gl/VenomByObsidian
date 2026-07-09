@@ -7,8 +7,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
-import { collection, query, where, getDocs, limit, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
-import { db } from './src/firebase.js';
+import { db } from './api/_firebase-admin';
 import webPush from 'web-push';
 
 let vapidKeys: { publicKey: string; privateKey: string } | null = null;
@@ -22,9 +21,9 @@ async function getVapidKeys() {
   }
   
   try {
-    const keyDocRef = doc(db, 'system', 'vapidKeys');
-    const keyDoc = await getDoc(keyDocRef);
-    if (keyDoc.exists()) {
+    const keyDocRef = db.doc('system/vapidKeys');
+    const keyDoc = await keyDocRef.get();
+    if (keyDoc.exists) {
       const data = keyDoc.data();
       if (data && data.publicKey && data.privateKey) {
         vapidKeys = {
@@ -41,7 +40,7 @@ async function getVapidKeys() {
     }
     
     const generated = webPush.generateVAPIDKeys();
-    await setDoc(keyDocRef, {
+    await keyDocRef.set({
       publicKey: generated.publicKey,
       privateKey: generated.privateKey,
       updatedAt: new Date().toISOString()
@@ -54,7 +53,7 @@ async function getVapidKeys() {
     );
     return vapidKeys;
   } catch (err) {
-    console.error('Error fetching/generating VAPID keys, using dynamic fallback:', err);
+    console.error('Error fetching/generating VAPID keys in server.ts:', err);
     const generated = webPush.generateVAPIDKeys();
     webPush.setVapidDetails(
       'mailto:work.tilakpopatfilms@gmail.com',
@@ -68,8 +67,7 @@ async function getVapidKeys() {
 async function getPostByHash(hash: string) {
   if (!db) return null;
   try {
-    const q = query(collection(db, 'posts'), where('encryptedHash', '==', hash), limit(1));
-    const querySnapshot = await getDocs(q);
+    const querySnapshot = await db.collection('posts').where('encryptedHash', '==', hash).limit(1).get();
     if (!querySnapshot.empty) {
       return querySnapshot.docs[0].data();
     }
@@ -177,9 +175,9 @@ async function startServer() {
     try {
       // Use URL-safe Base64 representation of endpoint as document ID
       const endpointHash = Buffer.from(subscription.endpoint).toString('base64url');
-      const subDocRef = doc(db, 'pushSubscriptions', endpointHash);
+      const subDocRef = db.doc(`pushSubscriptions/${endpointHash}`);
 
-      await setDoc(subDocRef, {
+      await subDocRef.set({
         endpoint: subscription.endpoint,
         keys: subscription.keys || {},
         browser: browser || 'Unknown',
@@ -191,8 +189,8 @@ async function startServer() {
 
       res.status(201).json({ success: true, message: 'Subscription successfully registered.' });
     } catch (err: any) {
-      console.error('Failed to save push subscription:', err);
-      res.status(500).json({ error: err.message });
+      console.error('Failed to save push subscription in server.ts:', err);
+      res.status(500).json({ error: err.message, stack: err.stack });
     }
   });
 
@@ -205,12 +203,12 @@ async function startServer() {
 
     try {
       const endpointHash = Buffer.from(endpoint).toString('base64url');
-      const subDocRef = doc(db, 'pushSubscriptions', endpointHash);
-      await deleteDoc(subDocRef);
+      const subDocRef = db.doc(`pushSubscriptions/${endpointHash}`);
+      await subDocRef.delete();
       res.json({ success: true, message: 'Subscription successfully removed.' });
     } catch (err: any) {
-      console.error('Failed to unsubscribe:', err);
-      res.status(500).json({ error: err.message });
+      console.error('Failed to unsubscribe in server.ts:', err);
+      res.status(500).json({ error: err.message, stack: err.stack });
     }
   });
 
@@ -223,8 +221,8 @@ async function startServer() {
 
     try {
       await getVapidKeys();
-      const subCollectionRef = collection(db, 'pushSubscriptions');
-      const subSnap = await getDocs(subCollectionRef);
+      const subCollectionRef = db.collection('pushSubscriptions');
+      const subSnap = await subCollectionRef.get();
 
       if (subSnap.empty) {
         return res.json({ success: true, sentCount: 0, message: 'No devices have registered for push notifications.' });
@@ -243,7 +241,7 @@ async function startServer() {
       let successCount = 0;
       let failureCount = 0;
 
-      const promises = subSnap.docs.map(async (subDoc) => {
+      const promises = subSnap.docs.map(async (subDoc: any) => {
         const subData = subDoc.data();
         const subscription = subData.subscription || {
           endpoint: subData.endpoint,
@@ -254,10 +252,12 @@ async function startServer() {
             await webPush.sendNotification(subscription, payload);
             successCount++;
           } catch (err: any) {
-            console.error(`Failed to send notification to doc ${subDoc.id}:`, err.message);
+            console.error(`Failed to send notification to doc ${subDoc.id} in server.ts:`, err.message);
             failureCount++;
             if (err.statusCode === 410 || err.statusCode === 404) {
-              await deleteDoc(doc(db, 'pushSubscriptions', subDoc.id)).catch(() => {});
+              await db.doc(`pushSubscriptions/${subDoc.id}`).delete().catch((delErr) => {
+                console.error(`Failed to delete obsolete subscription ${subDoc.id} in server.ts:`, delErr);
+              });
             }
           }
         }
@@ -272,8 +272,8 @@ async function startServer() {
         message: `Successfully broadcasted to ${successCount} devices, pruned ${failureCount} obsolete registration(s).`
       });
     } catch (err: any) {
-      console.error('Failed to broadcast push notification:', err);
-      res.status(500).json({ error: err.message });
+      console.error('Failed to broadcast push notification in server.ts:', err);
+      res.status(500).json({ error: err.message, stack: err.stack });
     }
   });
 
@@ -288,8 +288,8 @@ async function startServer() {
 
     try {
       await getVapidKeys();
-      const subCollectionRef = collection(db, 'pushSubscriptions');
-      const subSnap = await getDocs(subCollectionRef);
+      const subCollectionRef = db.collection('pushSubscriptions');
+      const subSnap = await subCollectionRef.get();
 
       if (subSnap.empty) {
         return res.json({
@@ -313,7 +313,7 @@ async function startServer() {
       let successCount = 0;
       let failureCount = 0;
 
-      const promises = subSnap.docs.map(async (subDoc) => {
+      const promises = subSnap.docs.map(async (subDoc: any) => {
         const subData = subDoc.data();
         const subscription = subData.subscription || {
           endpoint: subData.endpoint,
@@ -325,10 +325,12 @@ async function startServer() {
             await webPush.sendNotification(subscription, payload);
             successCount++;
           } catch (err: any) {
-            console.error(`Failed to send notification to doc ${subDoc.id}:`, err.message);
+            console.error(`Failed to send notification to doc ${subDoc.id} in server.ts:`, err.message);
             failureCount++;
             if (err.statusCode === 410 || err.statusCode === 404) {
-              await deleteDoc(doc(db, 'pushSubscriptions', subDoc.id)).catch(() => {});
+              await db.doc(`pushSubscriptions/${subDoc.id}`).delete().catch((delErr) => {
+                console.error(`Failed to delete obsolete subscription doc ${subDoc.id} in server.ts:`, delErr);
+              });
             }
           }
         }
@@ -343,8 +345,8 @@ async function startServer() {
         message: `Delivered message to ${successCount} active receiver(s) successfully. Pruned ${failureCount} defunct registration(s).`
       });
     } catch (err: any) {
-      console.error('Failed to broadcast push notification:', err);
-      res.status(500).json({ error: err.message });
+      console.error('Failed to broadcast push notification in server.ts:', err);
+      res.status(500).json({ error: err.message, stack: err.stack });
     }
   });
 

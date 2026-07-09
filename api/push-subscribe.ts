@@ -1,6 +1,10 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { IncomingMessage, ServerResponse } from 'http';
-import { doc, setDoc } from 'firebase/firestore';
-import { db } from '../src/firebase.js';
+import { db } from './_firebase-admin';
 
 async function getRequestBody(req: any): Promise<any> {
   if (req.body) return req.body;
@@ -53,15 +57,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
 
     if (!db) {
-      throw new Error('Database connection is not initialized.');
+      throw new Error('Firebase Admin Firestore database is not initialized.');
     }
 
     // Hash endpoint to create a unique alphanumeric document ID
     const endpointHash = Buffer.from(subscription.endpoint).toString('base64url');
-    const subDocRef = doc(db, 'pushSubscriptions', endpointHash);
+    const subDocRef = db.doc(`pushSubscriptions/${endpointHash}`);
 
     // Save complete structure exactly as required
-    await setDoc(subDocRef, {
+    await subDocRef.set({
       endpoint: subscription.endpoint,
       keys: subscription.keys || {},
       browser: browser || 'Unknown',
@@ -73,8 +77,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     res.end(JSON.stringify({ success: true, message: 'Subscription registered successfully.' }));
   } catch (err: any) {
-    console.error('Failed to register subscription on Vercel backend:', err);
+    console.error('API /api/push-subscribe failed:', err);
     res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: err.message || 'Database transaction failed.' }));
+    res.end(JSON.stringify({ 
+      error: err.message || 'Database transaction failed.',
+      stack: err.stack
+    }));
   }
 }

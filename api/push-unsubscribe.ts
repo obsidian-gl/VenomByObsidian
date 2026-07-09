@@ -1,6 +1,10 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { IncomingMessage, ServerResponse } from 'http';
-import { doc, deleteDoc } from 'firebase/firestore';
-import { db } from '../src/firebase.js';
+import { db } from './_firebase-admin';
 
 async function getRequestBody(req: any): Promise<any> {
   if (req.body) return req.body;
@@ -53,17 +57,20 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
 
     if (!db) {
-      throw new Error('Database connection is not initialized.');
+      throw new Error('Firebase Admin Firestore database is not initialized.');
     }
 
     const endpointHash = Buffer.from(endpoint).toString('base64url');
-    const subDocRef = doc(db, 'pushSubscriptions', endpointHash);
-    await deleteDoc(subDocRef);
+    const subDocRef = db.doc(`pushSubscriptions/${endpointHash}`);
+    await subDocRef.delete();
 
     res.end(JSON.stringify({ success: true, message: 'Subscription removed successfully.' }));
   } catch (err: any) {
-    console.error('Failed to unsubscribe on Vercel backend:', err);
+    console.error('API /api/push-unsubscribe failed:', err);
     res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: err.message || 'Database transaction failed.' }));
+    res.end(JSON.stringify({ 
+      error: err.message || 'Database transaction failed.',
+      stack: err.stack 
+    }));
   }
 }

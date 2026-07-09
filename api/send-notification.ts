@@ -1,8 +1,12 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { IncomingMessage, ServerResponse } from 'http';
-import { collection, getDocs, doc, deleteDoc } from 'firebase/firestore';
-import { db } from '../src/firebase.js';
+import { db } from './_firebase-admin';
 import webPush from 'web-push';
-import { getVapidKeys } from './_vapid.js';
+import { getVapidKeys } from './_vapid';
 
 async function getRequestBody(req: any): Promise<any> {
   if (req.body) return req.body;
@@ -57,14 +61,14 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
 
     if (!db) {
-      throw new Error('Database connection is not initialized.');
+      throw new Error('Firebase Admin Firestore database is not initialized.');
     }
 
     // Ensure VAPID keys are retrieved and set up
     await getVapidKeys();
 
-    const subCollectionRef = collection(db, 'pushSubscriptions');
-    const subSnap = await getDocs(subCollectionRef);
+    const subCollectionRef = db.collection('pushSubscriptions');
+    const subSnap = await subCollectionRef.get();
 
     if (subSnap.empty) {
       res.end(JSON.stringify({
@@ -106,7 +110,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           failureCount++;
           // Prune / clean up expired or defunct subscriptions immediately (HTTP status 410 Gone or 404 Not Found)
           if (err.statusCode === 410 || err.statusCode === 404) {
-            await deleteDoc(doc(db, 'pushSubscriptions', subDoc.id)).catch(() => {});
+            await db.doc(`pushSubscriptions/${subDoc.id}`).delete().catch((delErr) => {
+              console.error(`Failed to auto-prune subscription doc ${subDoc.id}:`, delErr);
+            });
           }
         }
       }
@@ -121,8 +127,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       message: `Delivered message to ${successCount} active receiver(s) successfully. Pruned ${failureCount} defunct registration(s).`
     }));
   } catch (err: any) {
-    console.error('Failed to run notification broadcast transaction:', err);
+    console.error('API /api/send-notification failed:', err);
     res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: err.message || 'Notification broadcast protocol crashed.' }));
+    res.end(JSON.stringify({ 
+      error: err.message || 'Notification broadcast protocol crashed.',
+      stack: err.stack
+    }));
   }
 }

@@ -1,21 +1,21 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import webPush from 'web-push';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../src/firebase.js';
+import { db } from './_firebase-admin';
 
 let vapidKeys: { publicKey: string; privateKey: string } | null = null;
 
 export async function getVapidKeys() {
   if (vapidKeys) return vapidKeys;
-  if (!db) {
-    const keys = webPush.generateVAPIDKeys();
-    vapidKeys = keys;
-    return keys;
-  }
   
   try {
-    const keyDocRef = doc(db, 'system', 'vapidKeys');
-    const keyDoc = await getDoc(keyDocRef);
-    if (keyDoc.exists()) {
+    const keyDocRef = db.doc('system/vapidKeys');
+    const keyDoc = await keyDocRef.get();
+    
+    if (keyDoc.exists) {
       const data = keyDoc.data();
       if (data && data.publicKey && data.privateKey) {
         vapidKeys = {
@@ -31,12 +31,14 @@ export async function getVapidKeys() {
       }
     }
     
+    // Generate fresh VAPID keys if they don't exist
     const generated = webPush.generateVAPIDKeys();
-    await setDoc(keyDocRef, {
+    await keyDocRef.set({
       publicKey: generated.publicKey,
       privateKey: generated.privateKey,
       updatedAt: new Date().toISOString()
     });
+    
     vapidKeys = generated;
     webPush.setVapidDetails(
       'mailto:work.tilakpopatfilms@gmail.com',
@@ -44,8 +46,9 @@ export async function getVapidKeys() {
       vapidKeys.privateKey
     );
     return vapidKeys;
-  } catch (err) {
-    console.error('Error fetching/generating VAPID keys, using dynamic fallback:', err);
+  } catch (err: any) {
+    console.error('Error fetching or generating VAPID keys from Admin Firestore:', err);
+    // Dynamic fallback key generation to prevent crashing the serverless container
     const generated = webPush.generateVAPIDKeys();
     webPush.setVapidDetails(
       'mailto:work.tilakpopatfilms@gmail.com',
