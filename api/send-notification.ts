@@ -49,8 +49,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
 
   try {
+    const startTime = Date.now();
     const body = await getRequestBody(req);
-    const { title, message, body: alternativeBody, icon, badge, image, url } = body;
+    const { title, message, body: alternativeBody, icon, badge, image, url, targetEndpoint } = body;
 
     const messageContent = message || alternativeBody;
 
@@ -75,6 +76,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         success: true,
         sentCount: 0,
         failedCount: 0,
+        executionTimeMs: Date.now() - startTime,
         message: 'No active devices have registered for push notifications.'
       }));
       return;
@@ -102,6 +104,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       };
 
       if (subscription && subscription.endpoint) {
+        // If targetEndpoint is specified, filter to only send to that specific subscriber
+        if (targetEndpoint && subscription.endpoint !== targetEndpoint) {
+          return;
+        }
+
         try {
           await webPush.sendNotification(subscription, payload);
           successCount++;
@@ -120,11 +127,34 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     await Promise.all(promises);
 
+    const executionTimeMs = Date.now() - startTime;
+
+    // Save notification history log to Firestore (skip logs for targeted test notifications)
+    if (!targetEndpoint) {
+      await db.collection('notificationHistory').add({
+        title,
+        message: messageContent,
+        icon: icon || 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
+        badge: badge || 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
+        image: image || '',
+        url: url || '/',
+        sentCount: successCount,
+        failedCount: failureCount,
+        executionTimeMs,
+        sentAt: new Date().toISOString()
+      }).catch((histErr) => {
+        console.error('Failed to log notification history to Firestore:', histErr);
+      });
+    }
+
     res.end(JSON.stringify({
       success: true,
       sentCount: successCount,
       failedCount: failureCount,
-      message: `Delivered message to ${successCount} active receiver(s) successfully. Pruned ${failureCount} defunct registration(s).`
+      executionTimeMs,
+      message: targetEndpoint
+        ? 'Test dispatch delivered to target browser.'
+        : `Delivered message to ${successCount} active receiver(s) successfully. Pruned ${failureCount} defunct registration(s).`
     }));
   } catch (err: any) {
     console.error('API /api/send-notification failed:', err);

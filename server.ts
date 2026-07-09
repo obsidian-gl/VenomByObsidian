@@ -177,15 +177,23 @@ async function startServer() {
       const endpointHash = Buffer.from(subscription.endpoint).toString('base64url');
       const subDocRef = db.doc(`pushSubscriptions/${endpointHash}`);
 
+      const keys = subscription.keys || {};
+      const p256dh = keys.p256dh || '';
+      const auth = keys.auth || '';
+      const now = new Date().toISOString();
+
       await subDocRef.set({
         endpoint: subscription.endpoint,
-        keys: subscription.keys || {},
+        p256dh: p256dh,
+        auth: auth,
         browser: browser || 'Unknown',
         device: device || 'Unknown',
         deviceImei: deviceImei || 'WEB-USER',
         subscription: subscription,
-        createdAt: new Date().toISOString()
-      });
+        createdAt: now,
+        updatedAt: now,
+        status: 'active'
+      }, { merge: true });
 
       res.status(201).json({ success: true, message: 'Subscription successfully registered.' });
     } catch (err: any) {
@@ -279,7 +287,8 @@ async function startServer() {
 
   // Broadcast push notifications to all registered devices (Standard payload with Icon, Badge, Image, URL)
   app.post('/api/send-notification', async (req, res) => {
-    const { title, message, body: alternativeBody, icon, badge, image, url } = req.body;
+    const startTime = Date.now();
+    const { title, message, body: alternativeBody, icon, badge, image, url, targetEndpoint } = req.body;
     const messageContent = message || alternativeBody;
 
     if (!title || !messageContent) {
@@ -296,6 +305,7 @@ async function startServer() {
           success: true,
           sentCount: 0,
           failedCount: 0,
+          executionTimeMs: Date.now() - startTime,
           message: 'No active devices have registered for push notifications.'
         });
       }
@@ -321,6 +331,11 @@ async function startServer() {
         };
 
         if (subscription && subscription.endpoint) {
+          // If targetEndpoint is provided, filter to only send to that specific subscriber
+          if (targetEndpoint && subscription.endpoint !== targetEndpoint) {
+            return;
+          }
+
           try {
             await webPush.sendNotification(subscription, payload);
             successCount++;
@@ -338,11 +353,34 @@ async function startServer() {
 
       await Promise.all(promises);
 
+      const executionTimeMs = Date.now() - startTime;
+
+      // Save notification history log to Firestore (skip logs for targeted test notifications)
+      if (!targetEndpoint) {
+        await db.collection('notificationHistory').add({
+          title,
+          message: messageContent,
+          icon: icon || 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
+          badge: badge || 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
+          image: image || '',
+          url: url || '/',
+          sentCount: successCount,
+          failedCount: failureCount,
+          executionTimeMs,
+          sentAt: new Date().toISOString()
+        }).catch((histErr) => {
+          console.error('Failed to log notification history in server.ts:', histErr);
+        });
+      }
+
       res.json({
         success: true,
         sentCount: successCount,
         failedCount: failureCount,
-        message: `Delivered message to ${successCount} active receiver(s) successfully. Pruned ${failureCount} defunct registration(s).`
+        executionTimeMs,
+        message: targetEndpoint
+          ? 'Test dispatch delivered to target browser.'
+          : `Delivered message to ${successCount} active receiver(s) successfully. Pruned ${failureCount} defunct registration(s).`
       });
     } catch (err: any) {
       console.error('Failed to broadcast push notification in server.ts:', err);

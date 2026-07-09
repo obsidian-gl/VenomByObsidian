@@ -64,16 +64,24 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const endpointHash = Buffer.from(subscription.endpoint).toString('base64url');
     const subDocRef = db.doc(`pushSubscriptions/${endpointHash}`);
 
-    // Save complete structure exactly as required
+    // Save complete structure exactly as required per production audit specifications
+    const keys = subscription.keys || {};
+    const p256dh = keys.p256dh || '';
+    const auth = keys.auth || '';
+    const now = new Date().toISOString();
+
     await subDocRef.set({
       endpoint: subscription.endpoint,
-      keys: subscription.keys || {},
+      p256dh: p256dh,
+      auth: auth,
       browser: browser || 'Unknown',
       device: device || 'Unknown',
       deviceImei: deviceImei || 'WEB-USER',
       subscription: subscription, // Keep full copy for direct web-push SDK usage
-      createdAt: new Date().toISOString()
-    });
+      createdAt: now,
+      updatedAt: now,
+      status: 'active'
+    }, { merge: true });
 
     res.end(JSON.stringify({ success: true, message: 'Subscription registered successfully.' }));
   } catch (err: any) {

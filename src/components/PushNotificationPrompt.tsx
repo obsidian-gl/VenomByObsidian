@@ -22,6 +22,18 @@ export const PushNotificationPrompt: React.FC = () => {
     }
   })();
 
+  const isAiStudioPreview = (() => {
+    if (typeof window === 'undefined') return false;
+    const hostname = window.location.hostname;
+    return (
+      hostname.includes('ais-dev-') ||
+      hostname.includes('ais-pre-') ||
+      hostname.includes('asia-southeast1.run.app') ||
+      hostname.includes('run.app') ||
+      hostname.includes('aistudio')
+    );
+  })();
+
   const handleOpenNewTab = () => {
     window.open(window.location.href, '_blank');
   };
@@ -113,7 +125,7 @@ export const PushNotificationPrompt: React.FC = () => {
               <X className="w-3.5 h-3.5" />
             </button>
 
-            {status === 'idle' && (
+             {status === 'idle' && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded bg-emerald-950/20 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
@@ -121,16 +133,18 @@ export const PushNotificationPrompt: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest block leading-none">
-                      {isIframe ? 'Iframe Sandbox Mode' : 'Dispatch Receiver'}
+                      {isAiStudioPreview ? 'Preview Environment' : isIframe ? 'Iframe Sandbox Mode' : 'Dispatch Receiver'}
                     </span>
                     <h4 className="text-xs font-black text-zinc-100 uppercase tracking-wider mt-1">
-                      {isIframe ? 'Open Standalone Tab' : 'Stay Live & Standby'}
+                      {isAiStudioPreview ? 'Push Notifications Suspended' : isIframe ? 'Open Standalone Tab' : 'Stay Live & Standby'}
                     </h4>
                   </div>
                 </div>
 
                 <p className="text-[11px] leading-relaxed font-sans text-zinc-400">
-                  {isIframe ? (
+                  {isAiStudioPreview ? (
+                    'Push Notifications cannot work inside AI Studio Preview. Browser sandbox layers and proxy authentication gates prevent external subscription handshakes. Please test from your deployed production HTTPS website.'
+                  ) : isIframe ? (
                     'Browser sandbox policies prevent service worker registration and push key authorizations inside preview frames. Open this app in a standalone browser tab to safely enable real-time notifications.'
                   ) : (
                     'Enable secure push notifications to receive real-time dispatches, group community activity, and network notifications even when browser tabs are closed.'
@@ -138,7 +152,15 @@ export const PushNotificationPrompt: React.FC = () => {
                 </p>
 
                 <div className="flex gap-2 pt-1">
-                  {isIframe ? (
+                  {isAiStudioPreview ? (
+                    <button
+                      onClick={handleDismiss}
+                      className="flex-1 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 text-[10px] font-black uppercase tracking-wider rounded transition-colors cursor-pointer"
+                      id="push-dismiss-action-btn"
+                    >
+                      Acknowledge
+                    </button>
+                  ) : isIframe ? (
                     <button
                       onClick={handleOpenNewTab}
                       className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-[10px] font-black uppercase tracking-wider rounded transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/30"
