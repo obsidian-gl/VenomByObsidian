@@ -140,7 +140,7 @@ async function startServer() {
   });
 
   // Get IP endpoint to resolve real device public IP behind proxies
-  app.get('/api/get-ip', (req, res) => {
+  app.all('/api/get-ip', (req, res) => {
     const xForwardedFor = req.headers['x-forwarded-for'];
     let ip = '';
     if (typeof xForwardedFor === 'string') {
@@ -158,7 +158,7 @@ async function startServer() {
   });
 
   // Get active VAPID public key
-  app.get('/api/push-vapid-key', async (req, res) => {
+  app.all('/api/push-vapid-key', async (req, res) => {
     try {
       const keys = await getVapidKeys();
       res.json({ publicKey: keys.publicKey });

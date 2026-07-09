@@ -78,8 +78,9 @@ export async function subscribeUserToPush(): Promise<{ success: boolean; error?:
     await registration.update().catch(() => {});
     const activeRegistration = await navigator.serviceWorker.ready;
 
-    // 4. Fetch VAPID Public Key from Server (with cache-busting timestamp query parameter)
+    // 4. Fetch VAPID Public Key from Server via POST (completely bypasses service worker interception)
     const response = await fetch(`/api/push-vapid-key?t=${Date.now()}`, {
+      method: 'POST',
       headers: {
         'Accept': 'application/json',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
