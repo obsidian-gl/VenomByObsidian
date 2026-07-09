@@ -54,35 +54,63 @@ export async function subscribeUserToPush(): Promise<{ success: boolean; error?:
       return { success: false, error: 'Notification permission was denied.' };
     }
 
-    // 2. Fetch VAPID Public Key from Server
-    const response = await fetch(`/api/push-vapid-key?t=${Date.now()}`);
+    // 2. Unregister any old service workers & clear caches to purge poisoned assets
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (const reg of registrations) {
+        await reg.unregister();
+        console.log('Unregistered active service worker instance');
+      }
+      
+      if ('caches' in window) {
+        const cacheKeys = await window.caches.keys();
+        for (const key of cacheKeys) {
+          await window.caches.delete(key);
+        }
+        console.log('Purged all browser cache storage items');
+      }
+    } catch (cleanErr) {
+      console.warn('Failed cleaning cache/SW registers:', cleanErr);
+    }
+
+    // 3. Register the new fresh Service Worker with the bypass /api/ rule
+    const registration = await navigator.serviceWorker.register('/sw.js');
+    await registration.update().catch(() => {});
+    const activeRegistration = await navigator.serviceWorker.ready;
+
+    // 4. Fetch VAPID Public Key from Server (with cache-busting timestamp query parameter)
+    const response = await fetch(`/api/push-vapid-key?t=${Date.now()}`, {
+      headers: {
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      }
+    });
+    
     if (!response.ok) {
       throw new Error(`Failed to retrieve network security keys: ${response.statusText}`);
     }
+    
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text();
+      console.error('Server returned non-JSON response:', text);
+      throw new Error('Received unexpected non-JSON gateway protocol. Please retry.');
+    }
+
     const { publicKey } = await response.json();
     if (!publicKey) {
       throw new Error('Server returned empty security key.');
     }
 
-    // 3. Register or get Service Worker
-    let registration = await navigator.serviceWorker.getRegistration();
-    if (!registration) {
-      registration = await navigator.serviceWorker.register('/sw.js');
-    }
-    // Force update to download the new sw.js with the /api/ bypass rules
-    await registration.update().catch(() => {});
-    
-    // Wait for the worker to be fully ready
-    registration = await navigator.serviceWorker.ready;
-
-    // 4. Subscribe with Push Manager
+    // 5. Subscribe with Push Manager
     const applicationServerKey = urlBase64ToUint8Array(publicKey);
-    const subscription = await registration.pushManager.subscribe({
+    const subscription = await activeRegistration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey,
     });
 
-    // 5. Send Subscription details to Express Server
+    // 6. Send Subscription details to Express Server
     const saveResponse = await fetch('/api/push-subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
