@@ -18,11 +18,13 @@ let notificationsAuth: any;
 
 try {
   // 1. Initialize Main App ("alert-thought-dcf5x") as the Default App
-  const mainProjectId = 'alert-thought-dcf5x';
   const mainConfig = {
-    projectId: mainProjectId,
-    authDomain: `${mainProjectId}.firebaseapp.com`,
-    storageBucket: `${mainProjectId}.firebasestorage.app`,
+    apiKey: "AIzaSyAKuh8v64OxrbO1LHSsloxTCtEXkwJQ2A0",
+    authDomain: "alert-thought-dcf5x.firebaseapp.com",
+    projectId: "alert-thought-dcf5x",
+    storageBucket: "alert-thought-dcf5x.firebasestorage.app",
+    messagingSenderId: "193424098563",
+    appId: "1:193424098563:web:bb8645417b498a754d5536"
   };
 
   app = initializeApp(mainConfig);
@@ -37,17 +39,14 @@ try {
   });
 
   // 2. Initialize Notifications App ("venom-notifications") as a Secondary Named App
-  const apiKey = import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey;
-  const appId = import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfig.appId;
-  const notificationsProjectId = 'venom-notifications';
-
   const notificationsConfig = {
-    apiKey: apiKey || undefined,
-    projectId: notificationsProjectId,
-    appId: appId || undefined,
-    authDomain: firebaseConfig.authDomain || `${notificationsProjectId}.firebaseapp.com`,
-    storageBucket: firebaseConfig.storageBucket || `${notificationsProjectId}.firebasestorage.app`,
-    messagingSenderId: firebaseConfig.messagingSenderId || undefined,
+    apiKey: "AIzaSyDBW55oGaTn1rWXMRUPkJT6UPf_I3fj7NE",
+    authDomain: "venom-notifications.firebaseapp.com",
+    projectId: "venom-notifications",
+    storageBucket: "venom-notifications.firebasestorage.app",
+    messagingSenderId: "433113689006",
+    appId: "1:433113689006:web:a66363977196c847c7363f",
+    measurementId: "G-Z06LJGBSKX"
   };
 
   notificationsApp = initializeApp(notificationsConfig, 'notifications');
