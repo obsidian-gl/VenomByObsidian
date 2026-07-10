@@ -12,36 +12,56 @@ let app: any;
 let db: any;
 let auth: any;
 
-try {
-  const apiKey = import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey;
-  const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfig.projectId || 'venom-notifications';
-  const appId = import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfig.appId;
+let notificationsApp: any;
+let notificationsDb: any;
+let notificationsAuth: any;
 
-  const config = {
-    apiKey: apiKey || undefined,
-    projectId,
-    appId: appId || undefined,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig.authDomain || `${projectId}.firebaseapp.com`,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfig.storageBucket || `${projectId}.firebasestorage.app`,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfig.messagingSenderId || undefined,
+try {
+  // 1. Initialize Main App ("alert-thought-dcf5x") as the Default App
+  const mainProjectId = 'alert-thought-dcf5x';
+  const mainConfig = {
+    projectId: mainProjectId,
+    authDomain: `${mainProjectId}.firebaseapp.com`,
+    storageBucket: `${mainProjectId}.firebasestorage.app`,
   };
 
-  app = initializeApp(config);
+  app = initializeApp(mainConfig);
   db = initializeFirestore(app, {
     ignoreUndefinedProperties: true
   });
-  setLogLevel('error');
   auth = getAuth(app);
-  
+
   // Authenticate anonymously on boot to maintain stable session tracking
   signInAnonymously(auth).catch((error) => {
-    console.warn("Anonymous authentication check:", error.message);
+    console.warn("Anonymous authentication check (main DB):", error.message);
   });
+
+  // 2. Initialize Notifications App ("venom-notifications") as a Secondary Named App
+  const apiKey = import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey;
+  const appId = import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfig.appId;
+  const notificationsProjectId = 'venom-notifications';
+
+  const notificationsConfig = {
+    apiKey: apiKey || undefined,
+    projectId: notificationsProjectId,
+    appId: appId || undefined,
+    authDomain: firebaseConfig.authDomain || `${notificationsProjectId}.firebaseapp.com`,
+    storageBucket: firebaseConfig.storageBucket || `${notificationsProjectId}.firebasestorage.app`,
+    messagingSenderId: firebaseConfig.messagingSenderId || undefined,
+  };
+
+  notificationsApp = initializeApp(notificationsConfig, 'notifications');
+  notificationsDb = initializeFirestore(notificationsApp, {
+    ignoreUndefinedProperties: true
+  });
+  notificationsAuth = getAuth(notificationsApp);
+
+  setLogLevel('error');
 } catch (error) {
-  console.error("Failed to initialize Firebase client SDK:", error);
+  console.error("Failed to initialize Firebase client SDKs:", error);
 }
 
-export { app, db, auth };
+export { app, db, auth, notificationsApp, notificationsDb, notificationsAuth };
 
 // Connection test helper from skill guidelines
 export async function testConnection() {

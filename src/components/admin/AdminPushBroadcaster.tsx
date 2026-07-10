@@ -21,7 +21,7 @@ import {
   Sparkles,
   ShieldAlert
 } from 'lucide-react';
-import { db } from '../../firebase';
+import { db, notificationsDb } from '../../firebase';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { getBrowserInfo, getDeviceInfo } from '../../utils/push';
 
@@ -77,22 +77,19 @@ export const AdminPushBroadcaster: React.FC = () => {
 
   // Fetch past transmissions history
   const loadHistory = async () => {
-    if (!db) return;
+    if (!notificationsDb) return;
     setIsLoadingHistory(true);
     try {
       const q = query(
-        collection(db, 'posts'),
-        orderBy('createdAt', 'desc'),
-        limit(100)
+        collection(notificationsDb, 'notificationHistory'),
+        orderBy('sentAt', 'desc'),
+        limit(10)
       );
       const snap = await getDocs(q);
-      const items = snap.docs
-        .filter(doc => doc.id.startsWith('notificationHistory_'))
-        .map(doc => ({
-          id: doc.id.replace('notificationHistory_', ''),
-          ...doc.data()
-        }))
-        .slice(0, 10);
+      const items = snap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
       setHistoryLogs(items);
     } catch (err: any) {
       console.error('Failed to retrieve notification logs:', err);
