@@ -3,74 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import dotenv from 'dotenv';
-dotenv.config();
-
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
-import { db } from './api/_firebase-admin';
-import webPush from 'web-push';
-
-let vapidKeys: { publicKey: string; privateKey: string } | null = null;
-
-async function getVapidKeys() {
-  if (vapidKeys) return vapidKeys;
-  if (!db) {
-    const keys = webPush.generateVAPIDKeys();
-    vapidKeys = keys;
-    return keys;
-  }
-  
-  try {
-    const keyDocRef = db.doc('system/vapidKeys');
-    const keyDoc = await keyDocRef.get();
-    if (keyDoc.exists) {
-      const data = keyDoc.data();
-      if (data && data.publicKey && data.privateKey) {
-        vapidKeys = {
-          publicKey: data.publicKey,
-          privateKey: data.privateKey
-        };
-        webPush.setVapidDetails(
-          'mailto:work.tilakpopatfilms@gmail.com',
-          vapidKeys.publicKey,
-          vapidKeys.privateKey
-        );
-        return vapidKeys;
-      }
-    }
-    
-    const generated = webPush.generateVAPIDKeys();
-    await keyDocRef.set({
-      publicKey: generated.publicKey,
-      privateKey: generated.privateKey,
-      updatedAt: new Date().toISOString()
-    });
-    vapidKeys = generated;
-    webPush.setVapidDetails(
-      'mailto:work.tilakpopatfilms@gmail.com',
-      vapidKeys.publicKey,
-      vapidKeys.privateKey
-    );
-    return vapidKeys;
-  } catch (err) {
-    console.error('Error fetching/generating VAPID keys in server.ts:', err);
-    const generated = webPush.generateVAPIDKeys();
-    webPush.setVapidDetails(
-      'mailto:work.tilakpopatfilms@gmail.com',
-      generated.publicKey,
-      generated.privateKey
-    );
-    return generated;
-  }
-}
+import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { db } from './src/firebase.js';
 
 async function getPostByHash(hash: string) {
   if (!db) return null;
   try {
-    const querySnapshot = await db.collection('posts').where('encryptedHash', '==', hash).limit(1).get();
+    const q = query(collection(db, 'posts'), where('encryptedHash', '==', hash), limit(1));
+    const querySnapshot = await getDocs(q);
     if (!querySnapshot.empty) {
       return querySnapshot.docs[0].data();
     }
@@ -123,9 +67,6 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Support JSON payloads for web push subscriptions
-  app.use(express.json());
-
   // Set up Vite server instance outside for use in the dynamic index.html interceptor
   let vite: any = null;
   if (process.env.NODE_ENV !== 'production') {
@@ -141,7 +82,7 @@ async function startServer() {
   });
 
   // Get IP endpoint to resolve real device public IP behind proxies
-  app.all('/api/get-ip', (req, res) => {
+  app.get('/api/get-ip', (req, res) => {
     const xForwardedFor = req.headers['x-forwarded-for'];
     let ip = '';
     if (typeof xForwardedFor === 'string') {
@@ -156,239 +97,6 @@ async function startServer() {
       ip = '127.0.0.1';
     }
     res.json({ ip });
-  });
-
-  // Get active VAPID public key
-  app.all('/api/push-vapid-key', async (req, res) => {
-    try {
-      const keys = await getVapidKeys();
-      res.json({ publicKey: keys.publicKey });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // Save/Register push subscription
-  app.post('/api/push-subscribe', async (req, res) => {
-    const { subscription, browser, device, deviceImei } = req.body;
-    if (!subscription || !subscription.endpoint) {
-      return res.status(400).json({ error: 'Subscription data with endpoint is required.' });
-    }
-
-    try {
-      // Use URL-safe Base64 representation of endpoint as document ID
-      const endpointHash = Buffer.from(subscription.endpoint).toString('base64url');
-      const subDocRef = db.doc(`pushSubscriptions/${endpointHash}`);
-
-      const keys = subscription.keys || {};
-      const p256dh = keys.p256dh || '';
-      const auth = keys.auth || '';
-      const now = new Date().toISOString();
-
-      await subDocRef.set({
-        endpoint: subscription.endpoint,
-        p256dh: p256dh,
-        auth: auth,
-        browser: browser || 'Unknown',
-        device: device || 'Unknown',
-        deviceImei: deviceImei || 'WEB-USER',
-        subscription: subscription,
-        createdAt: now,
-        updatedAt: now,
-        status: 'active'
-      }, { merge: true });
-
-      res.status(201).json({ success: true, message: 'Subscription successfully registered.' });
-    } catch (err: any) {
-      console.error('Failed to save push subscription in server.ts:', err);
-      res.status(500).json({ error: err.message, stack: err.stack });
-    }
-  });
-
-  // Remove/Unsubscribe push subscription
-  app.post('/api/push-unsubscribe', async (req, res) => {
-    const { endpoint } = req.body;
-    if (!endpoint) {
-      return res.status(400).json({ error: 'Subscription endpoint is required.' });
-    }
-
-    try {
-      const endpointHash = Buffer.from(endpoint).toString('base64url');
-      const subDocRef = db.doc(`pushSubscriptions/${endpointHash}`);
-      await subDocRef.delete();
-      res.json({ success: true, message: 'Subscription successfully removed.' });
-    } catch (err: any) {
-      console.error('Failed to unsubscribe in server.ts:', err);
-      res.status(500).json({ error: err.message, stack: err.stack });
-    }
-  });
-
-  // Broadcast push notifications to all registered devices (Legacy helper)
-  app.post('/api/push-send', async (req, res) => {
-    const { title, body, url } = req.body;
-    if (!title || !body) {
-      return res.status(400).json({ error: 'Title and body are required.' });
-    }
-
-    try {
-      await getVapidKeys();
-      const subCollectionRef = db.collection('pushSubscriptions');
-      const subSnap = await subCollectionRef.get();
-
-      if (subSnap.empty) {
-        return res.json({ success: true, sentCount: 0, message: 'No devices have registered for push notifications.' });
-      }
-
-      const payload = JSON.stringify({
-        title,
-        body,
-        url: url || '/',
-        icon: 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
-        badge: 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
-        image: '',
-        timestamp: Date.now()
-      });
-
-      let successCount = 0;
-      let failureCount = 0;
-
-      const promises = subSnap.docs.map(async (subDoc: any) => {
-        const subData = subDoc.data();
-        const subscription = subData.subscription || {
-          endpoint: subData.endpoint,
-          keys: subData.keys || {}
-        };
-        if (subscription && subscription.endpoint) {
-          try {
-            await webPush.sendNotification(subscription, payload);
-            successCount++;
-          } catch (err: any) {
-            console.error(`Failed to send notification to doc ${subDoc.id} in server.ts:`, err.message);
-            failureCount++;
-            if (err.statusCode === 410 || err.statusCode === 404) {
-              await db.doc(`pushSubscriptions/${subDoc.id}`).delete().catch((delErr) => {
-                console.error(`Failed to delete obsolete subscription ${subDoc.id} in server.ts:`, delErr);
-              });
-            }
-          }
-        }
-      });
-
-      await Promise.all(promises);
-
-      res.json({
-        success: true,
-        sentCount: successCount,
-        failedCount: failureCount,
-        message: `Successfully broadcasted to ${successCount} devices, pruned ${failureCount} obsolete registration(s).`
-      });
-    } catch (err: any) {
-      console.error('Failed to broadcast push notification in server.ts:', err);
-      res.status(500).json({ error: err.message, stack: err.stack });
-    }
-  });
-
-  // Broadcast push notifications to all registered devices (Standard payload with Icon, Badge, Image, URL)
-  app.post('/api/send-notification', async (req, res) => {
-    const startTime = Date.now();
-    const { title, message, body: alternativeBody, icon, badge, image, url, targetEndpoint } = req.body;
-    const messageContent = message || alternativeBody;
-
-    if (!title || !messageContent) {
-      return res.status(400).json({ error: 'Title and message/body are required.' });
-    }
-
-    try {
-      await getVapidKeys();
-      const subCollectionRef = db.collection('pushSubscriptions');
-      const subSnap = await subCollectionRef.get();
-
-      if (subSnap.empty) {
-        return res.json({
-          success: true,
-          sentCount: 0,
-          failedCount: 0,
-          executionTimeMs: Date.now() - startTime,
-          message: 'No active devices have registered for push notifications.'
-        });
-      }
-
-      const payload = JSON.stringify({
-        title,
-        body: messageContent,
-        icon: icon || 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
-        badge: badge || 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
-        image: image || '',
-        url: url || '/',
-        timestamp: Date.now()
-      });
-
-      let successCount = 0;
-      let failureCount = 0;
-
-      const promises = subSnap.docs.map(async (subDoc: any) => {
-        const subData = subDoc.data();
-        const subscription = subData.subscription || {
-          endpoint: subData.endpoint,
-          keys: subData.keys || {}
-        };
-
-        if (subscription && subscription.endpoint) {
-          // If targetEndpoint is provided, filter to only send to that specific subscriber
-          if (targetEndpoint && subscription.endpoint !== targetEndpoint) {
-            return;
-          }
-
-          try {
-            await webPush.sendNotification(subscription, payload);
-            successCount++;
-          } catch (err: any) {
-            console.error(`Failed to send notification to doc ${subDoc.id} in server.ts:`, err.message);
-            failureCount++;
-            if (err.statusCode === 410 || err.statusCode === 404) {
-              await db.doc(`pushSubscriptions/${subDoc.id}`).delete().catch((delErr) => {
-                console.error(`Failed to delete obsolete subscription doc ${subDoc.id} in server.ts:`, delErr);
-              });
-            }
-          }
-        }
-      });
-
-      await Promise.all(promises);
-
-      const executionTimeMs = Date.now() - startTime;
-
-      // Save notification history log to Firestore (skip logs for targeted test notifications)
-      if (!targetEndpoint) {
-        await db.collection('notificationHistory').add({
-          title,
-          message: messageContent,
-          icon: icon || 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
-          badge: badge || 'https://i.ibb.co/jkzWK6V6/14895-removebg-preview.png',
-          image: image || '',
-          url: url || '/',
-          sentCount: successCount,
-          failedCount: failureCount,
-          executionTimeMs,
-          sentAt: new Date().toISOString()
-        }).catch((histErr) => {
-          console.error('Failed to log notification history in server.ts:', histErr);
-        });
-      }
-
-      res.json({
-        success: true,
-        sentCount: successCount,
-        failedCount: failureCount,
-        executionTimeMs,
-        message: targetEndpoint
-          ? 'Test dispatch delivered to target browser.'
-          : `Delivered message to ${successCount} active receiver(s) successfully. Pruned ${failureCount} defunct registration(s).`
-      });
-    } catch (err: any) {
-      console.error('Failed to broadcast push notification in server.ts:', err);
-      res.status(500).json({ error: err.message, stack: err.stack });
-    }
   });
 
   // Redirect root favicon requests to the custom favicon to guarantee tab display

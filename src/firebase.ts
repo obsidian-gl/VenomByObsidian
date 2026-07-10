@@ -8,59 +8,27 @@ import { initializeFirestore, doc, getDocFromServer, setLogLevel } from 'firebas
 import { getAuth, signInAnonymously } from 'firebase/auth';
 import firebaseConfig from '../firebase-applet-config.json';
 
-let app: any;
+let app;
 let db: any;
 let auth: any;
 
-let notificationsApp: any;
-let notificationsDb: any;
-let notificationsAuth: any;
-
 try {
-  // 1. Initialize Main App ("alert-thought-dcf5x") as the Default App
-  const mainConfig = {
-    apiKey: "AIzaSyAKuh8v64OxrbO1LHSsloxTCtEXkwJQ2A0",
-    authDomain: "alert-thought-dcf5x.firebaseapp.com",
-    projectId: "alert-thought-dcf5x",
-    storageBucket: "alert-thought-dcf5x.firebasestorage.app",
-    messagingSenderId: "193424098563",
-    appId: "1:193424098563:web:bb8645417b498a754d5536"
-  };
-
-  app = initializeApp(mainConfig);
+  app = initializeApp(firebaseConfig);
   db = initializeFirestore(app, {
     ignoreUndefinedProperties: true
-  });
+  }, firebaseConfig.firestoreDatabaseId);
+  setLogLevel('error');
   auth = getAuth(app);
-
+  
   // Authenticate anonymously on boot to maintain stable session tracking
   signInAnonymously(auth).catch((error) => {
-    console.warn("Anonymous authentication check (main DB):", error.message);
+    console.warn("Anonymous authentication check:", error.message);
   });
-
-  // 2. Initialize Notifications App ("venom-notifications") as a Secondary Named App
-  const notificationsConfig = {
-    apiKey: "AIzaSyDBW55oGaTn1rWXMRUPkJT6UPf_I3fj7NE",
-    authDomain: "venom-notifications.firebaseapp.com",
-    projectId: "venom-notifications",
-    storageBucket: "venom-notifications.firebasestorage.app",
-    messagingSenderId: "433113689006",
-    appId: "1:433113689006:web:a66363977196c847c7363f",
-    measurementId: "G-Z06LJGBSKX"
-  };
-
-  notificationsApp = initializeApp(notificationsConfig, 'notifications');
-  notificationsDb = initializeFirestore(notificationsApp, {
-    ignoreUndefinedProperties: true
-  });
-  notificationsAuth = getAuth(notificationsApp);
-
-  setLogLevel('error');
 } catch (error) {
-  console.error("Failed to initialize Firebase client SDKs:", error);
+  console.error("Failed to initialize Firebase", error);
 }
 
-export { app, db, auth, notificationsApp, notificationsDb, notificationsAuth };
+export { app, db, auth };
 
 // Connection test helper from skill guidelines
 export async function testConnection() {

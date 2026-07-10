@@ -9,7 +9,6 @@ import { doc, setDoc } from 'firebase/firestore';
 import { Post } from '../../types';
 import { AdminTelemetry } from './AdminTelemetry';
 import { AdminSecurity } from './AdminSecurity';
-import { AdminPushBroadcaster } from './AdminPushBroadcaster';
 import { AdminPosts } from './AdminPosts';
 import { AdminEditModal } from './AdminEditModal';
 import { 
@@ -339,7 +338,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ posts, onNavigat
               {/* LEFT SECURITY COLUMN (4/12 columns) */}
               <div className="lg:col-span-4 space-y-6">
                 <AdminSecurity />
-                <AdminPushBroadcaster />
               </div>
 
               {/* RIGHT DATABASE COLUMN (8/12 columns) */}

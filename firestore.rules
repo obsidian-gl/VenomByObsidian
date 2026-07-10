@@ -31,23 +31,8 @@ service cloud.firestore {
       allow read: if true;
     }
 
-    // Allows reading and managing VAPID keys securely
-    match /vapidConfig/{docId} {
-      allow read, write: if true;
-    }
-
-    // Allows registering and managing push subscriptions
-    match /pushSubscriptions/{subId} {
-      allow read, write: if true;
-    }
-
     // Allows tracking and managing user-submitted reports
     match /reports/{reportId} {
-      allow read, write: if true;
-    }
-
-    // Allows tracking and reading notification broadcast logs
-    match /notificationHistory/{docId} {
       allow read, write: if true;
     }
 

@@ -51,7 +51,6 @@ import { checkIpBlockStatus, BlockStatus } from './utils/blockChecker';
 import QuarantineNoticeModal from './components/QuarantineNoticeModal';
 import { InstallPwaModal } from './components/InstallPwaModal';
 import { MobileBottomBar } from './components/MobileBottomBar';
-import { PushNotificationPrompt } from './components/PushNotificationPrompt';
 
 export default function App() {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -425,15 +424,10 @@ export default function App() {
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const fetchedPosts = snapshot.docs
-          .filter((docSnap) => {
-            const id = docSnap.id;
-            return !id.startsWith('vapidKeys') && !id.startsWith('pushSubscription_') && !id.startsWith('notificationHistory_');
-          })
-          .map((docSnap) => ({
-            id: docSnap.id,
-            ...docSnap.data(),
-          })) as Post[];
+        const fetchedPosts = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+        })) as Post[];
         
         setPosts(fetchedPosts);
         setDbConnected(true);
@@ -1085,8 +1079,6 @@ export default function App() {
         onClose={() => setShowInstallPwaModal(false)} 
         appType={installPwaAppType}
       />
-
-      <PushNotificationPrompt />
 
       <MobileBottomBar currentPath={currentPath} />
 
